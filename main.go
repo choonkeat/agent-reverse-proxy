@@ -31,6 +31,7 @@ func main() {
 	noStdio := flag.Bool("no-stdio", false, "Disable stdio MCP transport (HTTP MCP only)")
 	toolPrefix := flag.String("tool-prefix", "proxied", "Prefix for MCP tool names (e.g. 'preview' gives preview_browser_snapshot)")
 	serverName := flag.String("server-name", "agent-reverse-proxy", "MCP server name reported in initialize response")
+	themeCookie := flag.String("theme-cookie", "agent-reverse-proxy-theme", "Cookie name for light/dark theme on the error page")
 	flag.Parse()
 
 	appPort := resolveAppPort(*appPortFlag)
@@ -50,7 +51,7 @@ func main() {
 		log.Fatalf("invalid target URL: %v", err)
 	}
 
-	baseURL, ln, err := startHTTPServer(server, hub, targetURL, strconv.Itoa(appPort), proxyPort, *noInject)
+	baseURL, ln, err := startHTTPServer(server, hub, targetURL, strconv.Itoa(appPort), proxyPort, *noInject, *themeCookie)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
@@ -106,7 +107,7 @@ func resolveProxyPort(flagVal, appPort int) int {
 }
 
 // startHTTPServer starts the HTTP server with proxy, debug endpoints, and MCP.
-func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, appPortStr string, proxyPort int, noInject bool) (string, net.Listener, error) {
+func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, appPortStr string, proxyPort int, noInject bool, themeCookie string) (string, net.Listener, error) {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return mcpServer
 	}, &mcp.StreamableHTTPOptions{
@@ -147,7 +148,7 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 	})
 
 	// Reverse proxy (catch-all)
-	mux.HandleFunc("/", handleProxyRequest(targetURL, appPortStr, noInject))
+	mux.HandleFunc("/", handleProxyRequest(targetURL, appPortStr, noInject, themeCookie))
 
 	addr := fmt.Sprintf("0.0.0.0:%d", proxyPort)
 	ln, err := net.Listen("tcp", addr)

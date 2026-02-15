@@ -57,7 +57,7 @@ func modifyCSPHeader(h http.Header) {
 
 // handleProxyRequest proxies requests to the user's app at the given target URL.
 // If noInject is true, HTML injection is disabled (plain reverse proxy).
-func handleProxyRequest(target *url.URL, appPortStr string, noInject bool) http.HandlerFunc {
+func handleProxyRequest(target *url.URL, appPortStr string, noInject bool, themeCookie string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade detection: relay raw bytes instead of HTTP proxy
 		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
@@ -112,7 +112,7 @@ func handleProxyRequest(target *url.URL, appPortStr string, noInject bool) http.
 			log.Printf("Preview proxy error: %v", err)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, previewProxyErrorPage, appPortStr)
+			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appPortStr)
 			return
 		}
 		defer resp.Body.Close()

@@ -17,7 +17,7 @@ const previewProxyErrorPage = `<!DOCTYPE html>
     <meta charset="utf-8">
     <title>App Preview</title>
     <script>
-        (function(){var m=document.cookie.match(/(?:^|;\s*)swe-swe-theme=([^;]+)/);
+        (function(){var m=document.cookie.match(/(?:^|;\s*)%s=([^;]+)/);
         if(m)document.documentElement.setAttribute('data-theme',m[1]);})();
     </script>
     <style>
