@@ -27,7 +27,7 @@ If no server is running on `$PORT`, the proxy shows a "Waiting for App" page wit
 
 ## MCP Tools
 
-### `{{prefix}}_browser_snapshot`
+### `{{snapshot_tool}}`
 
 Capture a snapshot of the Preview content by CSS selector. Returns the text, HTML, and visibility of matching elements.
 
@@ -44,7 +44,7 @@ Response:
 {"t":"queryResult","found":true,"text":"Page Title","html":"<h1>Page Title</h1>","visible":true,"rect":{"x":0,"y":0,"width":100,"height":50}}
 ```
 
-### `{{prefix}}_browser_console_messages`
+### `{{console_tool}}`
 
 Listen for console logs, errors, and network requests from the Preview for a specified duration.
 

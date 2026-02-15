@@ -14,13 +14,14 @@ var appPreviewMD string
 //go:embed help.md
 var helpMD string
 
-func registerResources(server *mcp.Server, toolPrefix string) {
-	scheme := toolPrefix + "_browser"
+func registerResources(server *mcp.Server, toolPrefix ToolPrefix) {
 	resolve := func(s string) string {
-		return strings.ReplaceAll(s, "{{prefix}}", toolPrefix)
+		s = strings.ReplaceAll(s, "{{snapshot_tool}}", toolPrefix.ToolName("browser_snapshot"))
+		s = strings.ReplaceAll(s, "{{console_tool}}", toolPrefix.ToolName("browser_console_messages"))
+		return s
 	}
 
-	referenceURI := scheme + "://reference"
+	referenceURI := toolPrefix.ResourceURI("reference")
 	server.AddResource(&mcp.Resource{
 		URI:         referenceURI,
 		Name:        "reference",
@@ -38,7 +39,7 @@ func registerResources(server *mcp.Server, toolPrefix string) {
 		}, nil
 	})
 
-	helpURI := scheme + "://help"
+	helpURI := toolPrefix.ResourceURI("help")
 	server.AddResource(&mcp.Resource{
 		URI:         helpURI,
 		Name:        "help",

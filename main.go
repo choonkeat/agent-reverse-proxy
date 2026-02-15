@@ -36,14 +36,19 @@ func main() {
 	appPort := resolveAppPort(*appPortFlag)
 	proxyPort := resolveProxyPort(*proxyPortFlag, appPort)
 
+	prefix, err := NewToolPrefix(*toolPrefix)
+	if err != nil {
+		log.Fatalf("--tool-prefix: %v", err)
+	}
+
 	hub := NewDebugHub()
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agent-reverse-proxy",
 		Version: "0.1.0",
 	}, nil)
-	registerTools(server, hub, *toolPrefix)
-	registerResources(server, *toolPrefix)
+	registerTools(server, hub, prefix)
+	registerResources(server, prefix)
 
 	targetURL, err := url.Parse(fmt.Sprintf("http://localhost:%d", appPort))
 	if err != nil {
