@@ -18,6 +18,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const proxyVersion = "0.1.0"
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -45,7 +47,7 @@ func main() {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agent-reverse-proxy",
-		Version: "0.1.0",
+		Version: proxyVersion,
 	}, nil)
 	registerTools(server, hub, prefix)
 	registerResources(server, prefix)
@@ -161,8 +163,27 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 	}
 	actualPort := ln.Addr().(*net.TCPAddr).Port
 
+	// Every response carries X-Agent-Reverse-Proxy so the main UI's
+	// cross-origin probe can tell our responses (even 502) apart from
+	// Traefik's own 502 (proxy container not started yet).
+	// CORS exposes the header so JS can read it on cross-origin HEAD.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Agent-Reverse-Proxy", proxyVersion)
+		if origin := r.Header.Get("Origin"); origin != "" && (r.Method == http.MethodHead || r.Method == http.MethodOptions) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "HEAD, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Agent-Reverse-Proxy")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
+
 	go func() {
-		if err := http.Serve(ln, mux); err != nil {
+		if err := http.Serve(ln, handler); err != nil {
 			log.Printf("HTTP server error: %v", err)
 		}
 	}()
