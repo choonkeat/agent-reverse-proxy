@@ -41,6 +41,7 @@ func main() {
 		Version: "0.1.0",
 	}, nil)
 	registerTools(server, hub)
+	registerResources(server)
 
 	targetURL, err := url.Parse(fmt.Sprintf("http://localhost:%d", appPort))
 	if err != nil {
