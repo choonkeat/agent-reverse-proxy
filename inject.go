@@ -499,6 +499,41 @@ const debugInjectJS = `(function() {
     }
   })();
 
+  // Auto-upgrade ws:// to wss:// on HTTPS pages
+  var OrigWebSocket = window.WebSocket;
+  var wsWarningBar = null;
+  function showWsWarning(originalUrl, fixedUrl) {
+    send({ t: 'ws-upgrade', from: originalUrl, to: fixedUrl, ts: Date.now() });
+    if (!wsWarningBar) {
+      wsWarningBar = document.createElement('div');
+      wsWarningBar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;'
+        + 'background:#fef3cd;color:#856404;font:bold 12px/1.4 -apple-system,sans-serif;'
+        + 'padding:4px 12px;text-align:center;border-bottom:1px solid #ffc107;';
+      wsWarningBar.innerHTML = '';
+      (document.body || document.documentElement).appendChild(wsWarningBar);
+    }
+    var line = document.createElement('div');
+    line.textContent = 'WebSocket auto-upgraded: ' + originalUrl + ' \u2192 ' + fixedUrl
+      + ' \u2014 Fix: use wss:// or (location.protocol==="https:"?"wss://":"ws://")';
+    wsWarningBar.appendChild(line);
+  }
+  window.WebSocket = function(url, protocols) {
+    if (location.protocol === 'https:' && typeof url === 'string' && url.indexOf('ws://') === 0) {
+      var fixed = 'wss://' + url.slice(5);
+      showWsWarning(url, fixed);
+      url = fixed;
+    }
+    if (protocols !== undefined) {
+      return new OrigWebSocket(url, protocols);
+    }
+    return new OrigWebSocket(url);
+  };
+  window.WebSocket.prototype = OrigWebSocket.prototype;
+  window.WebSocket.CONNECTING = OrigWebSocket.CONNECTING;
+  window.WebSocket.OPEN = OrigWebSocket.OPEN;
+  window.WebSocket.CLOSING = OrigWebSocket.CLOSING;
+  window.WebSocket.CLOSED = OrigWebSocket.CLOSED;
+
   // Connect to debug channel
   connect();
 
