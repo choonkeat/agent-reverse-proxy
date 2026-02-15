@@ -29,6 +29,8 @@ func main() {
 	proxyPortFlag := flag.Int("proxy-port", 0, "Port for the proxy HTTP server (default: $PROXY_PORT or 20000+app-port)")
 	noInject := flag.Bool("no-inject", false, "Disable debug script injection (plain reverse proxy)")
 	noStdio := flag.Bool("no-stdio", false, "Disable stdio MCP transport (HTTP MCP only)")
+	toolPrefix := flag.String("tool-prefix", "proxied", "Prefix for MCP tool names (e.g. 'preview' gives preview_browser_snapshot)")
+	serverName := flag.String("server-name", "agent-reverse-proxy", "MCP server name reported in initialize response")
 	flag.Parse()
 
 	appPort := resolveAppPort(*appPortFlag)
@@ -37,11 +39,11 @@ func main() {
 	hub := NewDebugHub()
 
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "swe-swe-preview",
+		Name:    *serverName,
 		Version: "0.1.0",
 	}, nil)
-	registerTools(server, hub)
-	registerResources(server)
+	registerTools(server, hub, *toolPrefix)
+	registerResources(server, *toolPrefix)
 
 	targetURL, err := url.Parse(fmt.Sprintf("http://localhost:%d", appPort))
 	if err != nil {

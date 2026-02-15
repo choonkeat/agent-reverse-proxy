@@ -70,7 +70,7 @@ Container
 
 ### Tools
 
-#### `browser_debug_preview`
+#### `preview_browser_snapshot`
 
 Capture a snapshot of the Preview content by CSS selector.
 
@@ -106,7 +106,7 @@ Capture a snapshot of the Preview content by CSS selector.
 }
 ```
 
-#### `browser_debug_preview_listen`
+#### `preview_browser_console_messages`
 
 Listen for console logs, errors, and network requests from the Preview.
 
@@ -198,7 +198,7 @@ Iframe Clients (inject.js in browser)
 - Only one agent connection at a time (new replaces old)
 - Multiple UI observers allowed
 
-**In-process optimization**: Since the MCP server and DebugHub are in the same process, `browser_debug_preview` and `browser_debug_preview_listen` can call DebugHub methods directly (no WebSocket self-connection needed). The `/agent` WebSocket endpoint should still exist for backward compatibility or external tools.
+**In-process optimization**: Since the MCP server and DebugHub are in the same process, `preview_browser_snapshot` and `preview_browser_console_messages` can call DebugHub methods directly (no WebSocket self-connection needed). The `/agent` WebSocket endpoint should still exist for backward compatibility or external tools.
 
 ## Inject Script (`inject.js`)
 
@@ -240,6 +240,8 @@ Flags:
   --proxy-port int   Port for the proxy HTTP server (default: $PROXY_PORT or 20000+app-port)
   --no-inject        Disable debug script injection (plain reverse proxy)
   --no-stdio         Disable stdio MCP transport (HTTP MCP only)
+  --tool-prefix str  Prefix for MCP tool names (default: "proxied")
+  --server-name str  MCP server name in initialize response (default: "agent-reverse-proxy")
 ```
 
 ## MCP Configuration
@@ -251,7 +253,7 @@ In the container's `.mcp.json`:
   "mcpServers": {
     "swe-swe-preview": {
       "command": "agent-reverse-proxy",
-      "args": []
+      "args": ["--server-name", "swe-swe-preview", "--tool-prefix", "preview"]
     }
   }
 }
@@ -295,7 +297,7 @@ The following code from `swe-swe-server/main.go` should be extracted:
 7. **processProxyResponse** (lines ~2242-2317): Response processing with injection
 8. **handleWebSocketRelay** (lines ~2323+): WebSocket relay for app WS connections
 9. **previewProxyErrorPage** (lines ~1163-1280): Error page HTML
-10. **MCP tool definitions and handlers** (lines ~2463-2636): browser_debug_preview, browser_debug_preview_listen
+10. **MCP tool definitions and handlers** (lines ~2463-2636): preview_browser_snapshot, preview_browser_console_messages
 
 ### What Changes in swe-swe-server
 

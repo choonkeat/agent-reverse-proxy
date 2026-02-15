@@ -10,13 +10,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func registerTools(server *mcp.Server, hub *DebugHub) {
+func registerTools(server *mcp.Server, hub *DebugHub, toolPrefix string) {
 	type QueryParams struct {
 		Selector string `json:"selector"`
 	}
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "browser_debug_preview",
+		Name: toolPrefix + "_browser_snapshot",
 		Description: "Capture a snapshot of the Preview content by CSS selector. " +
 			"Returns the text, HTML, and visibility of matching elements in the Preview. " +
 			"This is the correct tool for inspecting the Preview — browser_snapshot cannot see Preview content.",
@@ -76,7 +76,7 @@ func registerTools(server *mcp.Server, hub *DebugHub) {
 	}
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "browser_debug_preview_listen",
+		Name: toolPrefix + "_browser_console_messages",
 		Description: "Returns console logs, errors, and network requests from the Preview. " +
 			"Listens for the specified duration and returns all messages. " +
 			"This is the correct tool for debugging the Preview — browser_console_messages cannot see Preview output.",
