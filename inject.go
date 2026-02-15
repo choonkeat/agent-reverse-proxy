@@ -3,7 +3,7 @@ package main
 import "regexp"
 
 // debugScriptTag is injected into HTML responses to enable debug channel
-const debugScriptTag = `<script src="/__swe-swe-debug__/inject.js"></script>`
+const debugScriptTag = `<script src="/__agent-reverse-proxy-debug__/inject.js"></script>`
 
 // debugInjectScriptRe matches <head> or <body> tag (case insensitive)
 var debugInjectScriptRe = regexp.MustCompile(`(?i)(<head[^>]*>|<body[^>]*>)`)
@@ -157,7 +157,7 @@ const shellPageHTML = `<!DOCTYPE html>
   var _shellPendingForward = false;
 
   // Connect to debug WS as iframe client
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__swe-swe-debug__/ws';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__agent-reverse-proxy-debug__/ws';
   var ws = null;
   var reconnectAttempts = 0;
 
@@ -233,17 +233,17 @@ const shellPageHTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-// debugInjectJS is the debug script served at /__swe-swe-debug__/inject.js
+// debugInjectJS is the debug script served at /__agent-reverse-proxy-debug__/inject.js
 // It captures console logs, errors, fetch/XHR requests and forwards them via WebSocket
 const debugInjectJS = `(function() {
   'use strict';
 
   // Prevent double initialization
-  if (window.__sweSweDebugInit) return;
-  window.__sweSweDebugInit = true;
+  if (window.__arpDebugDebugInit) return;
+  window.__arpDebugDebugInit = true;
 
   var ws = null;
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__swe-swe-debug__/ws';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__agent-reverse-proxy-debug__/ws';
   var messageQueue = [];
   var reconnectAttempts = 0;
   var maxReconnectAttempts = 5;
@@ -435,7 +435,7 @@ const debugInjectJS = `(function() {
     try {
       var state = history.state;
       var merged = (state && typeof state === 'object') ? Object.assign({}, state) : {};
-      merged.__sweSweNavIdx = idx;
+      merged.__arpDebugNavIdx = idx;
       origReplace.call(history, merged, '', location.href);
     } catch(e) {}
   }
@@ -473,8 +473,8 @@ const debugInjectJS = `(function() {
 
   window.addEventListener('popstate', function(e) {
     var state = e.state;
-    if (state && typeof state.__sweSweNavIdx === 'number') {
-      _navIdx = state.__sweSweNavIdx;
+    if (state && typeof state.__arpDebugNavIdx === 'number') {
+      _navIdx = state.__arpDebugNavIdx;
     }
     checkUrl();
     sendNavState();
@@ -488,8 +488,8 @@ const debugInjectJS = `(function() {
   // Initialize: read existing navIdx from history.state or assume end-of-stack
   (function() {
     var state = history.state;
-    if (state && typeof state.__sweSweNavIdx === 'number') {
-      _navIdx = state.__sweSweNavIdx;
+    if (state && typeof state.__arpDebugNavIdx === 'number') {
+      _navIdx = state.__arpDebugNavIdx;
       _navMax = _navIdx;
     } else {
       // First visit: stamp index 0

@@ -157,18 +157,18 @@ The user's app is expected to run on `$APP_PORT` (or `$PORT` if `$APP_PORT` is n
 
 | Path | Handler |
 |------|---------|
-| `/__swe-swe-debug__/inject.js` | Serve the debug instrumentation script |
-| `/__swe-swe-debug__/ws` | WebSocket: iframe debug script connections |
-| `/__swe-swe-debug__/agent` | WebSocket: agent connections (for backward compat) |
-| `/__swe-swe-debug__/ui` | WebSocket: UI observer connections |
-| `/__swe-swe-debug__/open` | HTTP: open a URL in the Preview pane |
-| `/__swe-swe-shell__` | Serve the double-iframe shell page |
+| `/__agent-reverse-proxy-debug__/inject.js` | Serve the debug instrumentation script |
+| `/__agent-reverse-proxy-debug__/ws` | WebSocket: iframe debug script connections |
+| `/__agent-reverse-proxy-debug__/agent` | WebSocket: agent connections (for backward compat) |
+| `/__agent-reverse-proxy-debug__/ui` | WebSocket: UI observer connections |
+| `/__agent-reverse-proxy-debug__/open` | HTTP: open a URL in the Preview pane |
+| `/__agent-reverse-proxy-debug__/shell` | Serve the double-iframe shell page |
 | `/*` | Reverse proxy to user's app |
 
 ### Reverse Proxy Behavior
 
 1. **HTTP requests**: Forward to `http://localhost:$APP_PORT`, preserving method, headers, body
-2. **HTML responses**: Inject `<script src="/__swe-swe-debug__/inject.js"></script>` after first `<head>` or `<body>` tag
+2. **HTML responses**: Inject `<script src="/__agent-reverse-proxy-debug__/inject.js"></script>` after first `<head>` or `<body>` tag
 3. **Gzip responses**: Decompress, inject, serve uncompressed (update Content-Length, remove Content-Encoding)
 4. **Brotli responses**: Pass through unchanged (no injection)
 5. **CSP headers**: Modify to allow debug script (`script-src 'self'`) and WebSocket (`connect-src 'self' ws: wss:`)
@@ -214,10 +214,10 @@ The debug instrumentation script is injected into every HTML response. It:
 
 **Source**: The inject.js from the current `swe-swe-server` should be extracted as-is.
 
-## Shell Page (`/__swe-swe-shell__`)
+## Shell Page (`/__agent-reverse-proxy-debug__/shell`)
 
 A wrapper HTML page with a double-iframe architecture:
-- Outer page connects to `/__swe-swe-debug__/ws` as an iframe client
+- Outer page connects to `/__agent-reverse-proxy-debug__/ws` as an iframe client
 - Inner iframe loads the user's app content
 - Handles navigation commands (`back`, `forward`, `reload`) from the UI via WebSocket
 - Tracks navigation state at shell level for full-page (non-SPA) navigations

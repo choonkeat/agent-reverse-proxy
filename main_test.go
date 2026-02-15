@@ -27,32 +27,32 @@ func TestInjectDebugScript(t *testing.T) {
 		{
 			name:     "inject after <head>",
 			input:    `<!DOCTYPE html><html><head><title>Test</title></head><body></body></html>`,
-			expected: `<!DOCTYPE html><html><head><script src="/__swe-swe-debug__/inject.js"></script><title>Test</title></head><body></body></html>`,
+			expected: `<!DOCTYPE html><html><head><script src="/__agent-reverse-proxy-debug__/inject.js"></script><title>Test</title></head><body></body></html>`,
 		},
 		{
 			name:     "inject after <head> with attributes",
 			input:    `<html><head lang="en"><title>Test</title></head></html>`,
-			expected: `<html><head lang="en"><script src="/__swe-swe-debug__/inject.js"></script><title>Test</title></head></html>`,
+			expected: `<html><head lang="en"><script src="/__agent-reverse-proxy-debug__/inject.js"></script><title>Test</title></head></html>`,
 		},
 		{
 			name:     "inject after <body> if no head",
 			input:    `<!DOCTYPE html><html><body><p>Hello</p></body></html>`,
-			expected: `<!DOCTYPE html><html><body><script src="/__swe-swe-debug__/inject.js"></script><p>Hello</p></body></html>`,
+			expected: `<!DOCTYPE html><html><body><script src="/__agent-reverse-proxy-debug__/inject.js"></script><p>Hello</p></body></html>`,
 		},
 		{
 			name:     "case insensitive HEAD",
 			input:    `<HTML><HEAD><TITLE>Test</TITLE></HEAD></HTML>`,
-			expected: `<HTML><HEAD><script src="/__swe-swe-debug__/inject.js"></script><TITLE>Test</TITLE></HEAD></HTML>`,
+			expected: `<HTML><HEAD><script src="/__agent-reverse-proxy-debug__/inject.js"></script><TITLE>Test</TITLE></HEAD></HTML>`,
 		},
 		{
 			name:     "case insensitive BODY",
 			input:    `<HTML><BODY><P>Hello</P></BODY></HTML>`,
-			expected: `<HTML><BODY><script src="/__swe-swe-debug__/inject.js"></script><P>Hello</P></BODY></HTML>`,
+			expected: `<HTML><BODY><script src="/__agent-reverse-proxy-debug__/inject.js"></script><P>Hello</P></BODY></HTML>`,
 		},
 		{
 			name:     "mixed case hEaD",
 			input:    `<html><hEaD><title>Test</title></hEaD></html>`,
-			expected: `<html><hEaD><script src="/__swe-swe-debug__/inject.js"></script><title>Test</title></hEaD></html>`,
+			expected: `<html><hEaD><script src="/__agent-reverse-proxy-debug__/inject.js"></script><title>Test</title></hEaD></html>`,
 		},
 		{
 			name:     "no head or body - unchanged",
@@ -62,7 +62,7 @@ func TestInjectDebugScript(t *testing.T) {
 		{
 			name:     "head comes before body - only first injected",
 			input:    `<head></head><body></body>`,
-			expected: `<head><script src="/__swe-swe-debug__/inject.js"></script></head><body></body>`,
+			expected: `<head><script src="/__agent-reverse-proxy-debug__/inject.js"></script></head><body></body>`,
 		},
 	}
 
@@ -131,7 +131,7 @@ func TestModifyCSPHeader(t *testing.T) {
 
 func TestDebugInjectJSEndpoint(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/__swe-swe-debug__/inject.js" {
+		if r.URL.Path == "/__agent-reverse-proxy-debug__/inject.js" {
 			w.Header().Set("Content-Type", "application/javascript")
 			w.Write([]byte(debugInjectJS))
 			return
@@ -139,7 +139,7 @@ func TestDebugInjectJSEndpoint(t *testing.T) {
 		http.NotFound(w, r)
 	})
 
-	req := httptest.NewRequest("GET", "/__swe-swe-debug__/inject.js", nil)
+	req := httptest.NewRequest("GET", "/__agent-reverse-proxy-debug__/inject.js", nil)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -152,8 +152,8 @@ func TestDebugInjectJSEndpoint(t *testing.T) {
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "swe-swe-debug") {
-		t.Errorf("expected body to contain 'swe-swe-debug', got %q", body)
+	if !strings.Contains(body, "agent-reverse-proxy-debug") {
+		t.Errorf("expected body to contain 'agent-reverse-proxy-debug', got %q", body)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestDebugInjectJSContent(t *testing.T) {
 		"'log', 'warn', 'error'",
 		"window.fetch",
 		"XMLHttpRequest",
-		"__swe-swe-debug__/ws",
+		"__agent-reverse-proxy-debug__/ws",
 		"WebSocket",
 		"addEventListener('error'",
 		"unhandledrejection",
@@ -689,7 +689,7 @@ func TestResolveProxyPort(t *testing.T) {
 }
 
 func TestDebugEndpointPaths(t *testing.T) {
-	expectedIframePath := "/__swe-swe-debug__/ws"
+	expectedIframePath := "/__agent-reverse-proxy-debug__/ws"
 
 	if !strings.Contains(debugInjectJS, expectedIframePath) {
 		t.Errorf("inject.js should connect to %s", expectedIframePath)

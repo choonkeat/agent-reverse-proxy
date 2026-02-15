@@ -119,16 +119,16 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 	mux.Handle("/mcp", mcpHandler)
 
 	// Debug endpoints
-	mux.HandleFunc("/__swe-swe-debug__/inject.js", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/__agent-reverse-proxy-debug__/inject.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write([]byte(debugInjectJS))
 	})
 
-	mux.HandleFunc("/__swe-swe-debug__/ws", handleDebugIframeWS(hub))
-	mux.HandleFunc("/__swe-swe-debug__/agent", handleDebugAgentWS(hub))
-	mux.HandleFunc("/__swe-swe-debug__/ui", handleDebugUIObserverWS(hub))
+	mux.HandleFunc("/__agent-reverse-proxy-debug__/ws", handleDebugIframeWS(hub))
+	mux.HandleFunc("/__agent-reverse-proxy-debug__/agent", handleDebugAgentWS(hub))
+	mux.HandleFunc("/__agent-reverse-proxy-debug__/ui", handleDebugUIObserverWS(hub))
 
-	mux.HandleFunc("/__swe-swe-debug__/open", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/__agent-reverse-proxy-debug__/open", func(w http.ResponseWriter, r *http.Request) {
 		rawURL := r.URL.Query().Get("url")
 		if rawURL == "" {
 			http.Error(w, "missing url parameter", http.StatusBadRequest)
@@ -141,7 +141,7 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 	})
 
 	// Shell page
-	mux.HandleFunc("/__swe-swe-shell__", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/__agent-reverse-proxy-debug__/shell", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintf(w, shellPageHTML)
 	})
