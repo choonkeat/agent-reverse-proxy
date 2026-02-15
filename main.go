@@ -166,13 +166,15 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 	// Every response carries X-Agent-Reverse-Proxy so the main UI's
 	// cross-origin probe can tell our responses (even 502) apart from
 	// Traefik's own 502 (proxy container not started yet).
-	// CORS exposes the header so JS can read it on cross-origin HEAD.
+	// CORS headers are set on ALL methods (not just HEAD/OPTIONS) because
+	// iOS WebKit may convert HEAD to GET after a preflight, and without
+	// CORS on the GET response the header becomes opaque to JS.
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Agent-Reverse-Proxy", proxyVersion)
-		if origin := r.Header.Get("Origin"); origin != "" && (r.Method == http.MethodHead || r.Method == http.MethodOptions) {
+		if origin := r.Header.Get("Origin"); origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "HEAD, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 			w.Header().Set("Access-Control-Expose-Headers", "X-Agent-Reverse-Proxy")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
