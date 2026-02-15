@@ -30,7 +30,6 @@ func main() {
 	noInject := flag.Bool("no-inject", false, "Disable debug script injection (plain reverse proxy)")
 	noStdio := flag.Bool("no-stdio", false, "Disable stdio MCP transport (HTTP MCP only)")
 	toolPrefix := flag.String("tool-prefix", "proxied", "Prefix for MCP tool names (e.g. 'preview' gives preview_browser_snapshot)")
-	serverName := flag.String("server-name", "agent-reverse-proxy", "MCP server name reported in initialize response")
 	themeCookie := flag.String("theme-cookie", "agent-reverse-proxy-theme", "Cookie name for light/dark theme on the error page")
 	flag.Parse()
 
@@ -40,7 +39,7 @@ func main() {
 	hub := NewDebugHub()
 
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    *serverName,
+		Name:    "agent-reverse-proxy",
 		Version: "0.1.0",
 	}, nil)
 	registerTools(server, hub, *toolPrefix)

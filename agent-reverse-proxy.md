@@ -241,7 +241,6 @@ Flags:
   --no-inject        Disable debug script injection (plain reverse proxy)
   --no-stdio         Disable stdio MCP transport (HTTP MCP only)
   --tool-prefix str  Prefix for MCP tool names (default: "proxied")
-  --server-name str  MCP server name in initialize response (default: "agent-reverse-proxy")
   --theme-cookie str Cookie name for light/dark theme on the error page (default: "agent-reverse-proxy-theme")
 ```
 
@@ -254,7 +253,7 @@ In the container's `.mcp.json`:
   "mcpServers": {
     "swe-swe-preview": {
       "command": "agent-reverse-proxy",
-      "args": ["--server-name", "swe-swe-preview", "--tool-prefix", "preview", "--theme-cookie", "swe-swe-theme"]
+      "args": ["--tool-prefix", "preview", "--theme-cookie", "swe-swe-theme"]
     }
   }
 }
