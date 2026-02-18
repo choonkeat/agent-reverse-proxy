@@ -112,9 +112,9 @@ const previewProxyErrorPage = `<!DOCTYPE html>
         // Poll for app availability without page reload (no white flash)
         async function checkApp() {
             try {
-                const response = await fetch(window.location.href, { method: 'HEAD' });
-                // 502 = proxy error (this page), 200 = app is running
-                if (response.ok) {
+                const response = await fetch(window.location.href, { method: 'GET' });
+                // 502 = proxy can't reach app (this page). Anything else = app is responding.
+                if (response.status !== 502) {
                     window.location.reload();
                 }
             } catch (e) {
