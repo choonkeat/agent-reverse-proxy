@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "child_process";
+import { spawnSync, execFileSync } from "child_process";
 import { createRequire } from "module";
 import { existsSync, chmodSync } from "fs";
 import { dirname, join } from "path";
@@ -34,25 +34,48 @@ if (!platform || !arch) {
 const pkgName = `@choonkeat/agent-reverse-proxy-${platform}-${arch}`;
 const binName = process.platform === "win32" ? "agent-reverse-proxy.exe" : "agent-reverse-proxy";
 
-let binPath;
-try {
-  const pkgDir = dirname(require.resolve(`${pkgName}/package.json`));
-  binPath = join(pkgDir, "bin", binName);
-} catch {
-  // Fallback: check for local build in npm-platforms/ (development)
+function resolveBinPath() {
+  try {
+    const pkgDir = dirname(require.resolve(`${pkgName}/package.json`));
+    return join(pkgDir, "bin", binName);
+  } catch {
+    return null;
+  }
+}
+
+let binPath = resolveBinPath();
+
+// optionalDependencies may not be installed (e.g. npx) — install on demand
+if (!binPath) {
+  try {
+    console.error(`Installing ${pkgName}...`);
+    execFileSync("npm", ["install", "--no-save", pkgName], {
+      stdio: "inherit",
+      cwd: join(__dirname, ".."),
+    });
+    binPath = resolveBinPath();
+  } catch {
+    // ignore — fall through to local/error path
+  }
+}
+
+// Fallback: check for local build in npm-platforms/ (development)
+if (!binPath) {
   const localPath = join(__dirname, "..", "npm-platforms", `${platform}-${arch}`, "bin", binName);
   if (existsSync(localPath)) {
     binPath = localPath;
-  } else {
-    console.error(
-      `Could not find package ${pkgName}.\n` +
-        `Make sure it is installed — this usually means your platform is supported\n` +
-        `but the optional dependency was not installed.\n\n` +
-        `Try: npm install ${pkgName}\n` +
-        `Or run: npx @choonkeat/agent-reverse-proxy`
-    );
-    process.exit(1);
   }
+}
+
+if (!binPath) {
+  console.error(
+    `Could not find package ${pkgName}.\n` +
+      `Make sure it is installed — this usually means your platform is supported\n` +
+      `but the optional dependency was not installed.\n\n` +
+      `Try: npm install ${pkgName}\n` +
+      `Or run: npx @choonkeat/agent-reverse-proxy`
+  );
+  process.exit(1);
 }
 
 if (!existsSync(binPath)) {

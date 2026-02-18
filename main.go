@@ -18,7 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const proxyVersion = "0.1.0"
+const proxyVersion = "0.1.1"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
