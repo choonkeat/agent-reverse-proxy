@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"syscall"
 
-	agentproxy "agent-reverse-proxy"
+	agentproxy "github.com/choonkeat/agent-reverse-proxy"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

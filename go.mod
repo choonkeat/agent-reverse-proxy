@@ -1,4 +1,4 @@
-module agent-reverse-proxy
+module github.com/choonkeat/agent-reverse-proxy
 
 go 1.23.0
 
