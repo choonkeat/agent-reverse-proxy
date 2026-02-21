@@ -305,7 +305,10 @@ func extractTarget(path string) (*url.URL, string, error) {
 	return target, remainder, nil
 }
 
-// handleDebugIframeWS handles WebSocket connections from iframe debug scripts
+// handleDebugIframeWS handles WebSocket connections from iframe debug scripts.
+// The ?role query parameter determines which pool the client joins:
+//   - "shell" (default): shell page — receives navigate/reload commands
+//   - "inject": inject.js — receives query commands
 func handleDebugIframeWS(hub *DebugHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -315,8 +318,15 @@ func handleDebugIframeWS(hub *DebugHub) http.HandlerFunc {
 		}
 		defer conn.Close()
 
-		hub.AddIframeClient(conn)
-		defer hub.RemoveIframeClient(conn)
+		role := r.URL.Query().Get("role")
+		switch role {
+		case "inject":
+			hub.AddInjectClient(conn)
+			defer hub.RemoveInjectClient(conn)
+		default: // "shell" or unspecified
+			hub.AddShellClient(conn)
+			defer hub.RemoveShellClient(conn)
+		}
 
 		for {
 			_, msg, err := conn.ReadMessage()
@@ -377,7 +387,7 @@ func handleDebugUIObserverWS(hub *DebugHub) http.HandlerFunc {
 			if err != nil {
 				break
 			}
-			hub.ForwardToIframes(msg)
+			hub.RouteCommand(msg)
 		}
 	}
 }

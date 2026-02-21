@@ -259,8 +259,11 @@ func TestDebugHubClientManagement(t *testing.T) {
 	hub := NewDebugHub()
 
 	hub.mu.RLock()
-	if len(hub.iframeClients) != 0 {
-		t.Error("hub should start with no clients")
+	if len(hub.shellClients) != 0 {
+		t.Error("hub should start with no shell clients")
+	}
+	if len(hub.injectClients) != 0 {
+		t.Error("hub should start with no inject clients")
 	}
 	if hub.agentConn != nil {
 		t.Error("hub should start with no agent")
@@ -308,7 +311,7 @@ func TestDebugHubInProcessQuery(t *testing.T) {
 	defer iframeServer.Close()
 
 	// Connect a mock inject.js client that responds to queries
-	wsURL := "ws" + strings.TrimPrefix(iframeServer.URL, "http")
+	wsURL := "ws" + strings.TrimPrefix(iframeServer.URL, "http") + "?role=inject"
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("failed to connect mock inject.js: %v", err)
@@ -422,6 +425,104 @@ func TestDebugHubInProcessListen(t *testing.T) {
 			return
 		}
 	}
+}
+
+func TestDebugHubSelectiveRouting(t *testing.T) {
+	hub := NewDebugHub()
+
+	// Start WS server with the iframe handler
+	server := httptest.NewServer(handleDebugIframeWS(hub))
+	defer server.Close()
+	wsBase := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	// Connect a shell client and an inject client
+	shellConn, _, err := websocket.DefaultDialer.Dial(wsBase+"?role=shell", nil)
+	if err != nil {
+		t.Fatalf("failed to connect shell client: %v", err)
+	}
+	defer shellConn.Close()
+
+	injectConn, _, err := websocket.DefaultDialer.Dial(wsBase+"?role=inject", nil)
+	if err != nil {
+		t.Fatalf("failed to connect inject client: %v", err)
+	}
+	defer injectConn.Close()
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Channels to collect messages received by each client
+	shellMsgs := make(chan string, 10)
+	injectMsgs := make(chan string, 10)
+
+	go func() {
+		for {
+			_, msg, err := shellConn.ReadMessage()
+			if err != nil {
+				return
+			}
+			shellMsgs <- string(msg)
+		}
+	}()
+	go func() {
+		for {
+			_, msg, err := injectConn.ReadMessage()
+			if err != nil {
+				return
+			}
+			injectMsgs <- string(msg)
+		}
+	}()
+
+	t.Run("navigate routes to shell only", func(t *testing.T) {
+		msg := []byte(`{"t":"navigate","action":"back"}`)
+		hub.RouteCommand(msg)
+		select {
+		case <-shellMsgs:
+			// expected
+		case <-time.After(time.Second):
+			t.Error("shell client did not receive navigate")
+		}
+		select {
+		case m := <-injectMsgs:
+			t.Errorf("inject client should not receive navigate, got: %s", m)
+		case <-time.After(100 * time.Millisecond):
+			// expected: no message
+		}
+	})
+
+	t.Run("reload routes to shell only", func(t *testing.T) {
+		msg := []byte(`{"t":"reload"}`)
+		hub.RouteCommand(msg)
+		select {
+		case <-shellMsgs:
+			// expected
+		case <-time.After(time.Second):
+			t.Error("shell client did not receive reload")
+		}
+		select {
+		case m := <-injectMsgs:
+			t.Errorf("inject client should not receive reload, got: %s", m)
+		case <-time.After(100 * time.Millisecond):
+			// expected
+		}
+	})
+
+	t.Run("query routes to inject only", func(t *testing.T) {
+		msg := []byte(`{"t":"query","id":"q1","selector":"h1"}`)
+		hub.RouteCommand(msg)
+		select {
+		case <-injectMsgs:
+			// expected
+		case <-time.After(time.Second):
+			t.Error("inject client did not receive query")
+		}
+		select {
+		case m := <-shellMsgs:
+			t.Errorf("shell client should not receive query, got: %s", m)
+		case <-time.After(100 * time.Millisecond):
+			// expected
+		}
+	})
 }
 
 // --- Reverse proxy tests (from websocket_proxy_test.go) ---
@@ -631,7 +732,7 @@ func TestGzipHTMLInjectionThroughProxy(t *testing.T) {
 }
 
 func TestDebugEndpointPaths(t *testing.T) {
-	expectedIframePath := "/__agent-reverse-proxy-debug__/ws"
+	expectedIframePath := "/__agent-reverse-proxy-debug__/ws?role=inject"
 
 	if !strings.Contains(debugInjectJS, expectedIframePath) {
 		t.Errorf("inject.js should connect to %s", expectedIframePath)
@@ -1087,7 +1188,7 @@ func TestInjectJSBasePathDetection(t *testing.T) {
 	if !strings.Contains(debugInjectJS, "document.currentScript") {
 		t.Error("inject.js should use document.currentScript for base path detection")
 	}
-	if !strings.Contains(debugInjectJS, "_basePath + '/__agent-reverse-proxy-debug__/ws'") {
+	if !strings.Contains(debugInjectJS, "_basePath + '/__agent-reverse-proxy-debug__/ws?role=inject'") {
 		t.Error("inject.js should use _basePath in WS URL construction")
 	}
 }

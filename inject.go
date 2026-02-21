@@ -154,7 +154,7 @@ const shellPageHTML = `<!DOCTYPE html>
   var _shellPendingForward = false;
 
   // Connect to debug WS as iframe client
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__agent-reverse-proxy-debug__/ws';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__agent-reverse-proxy-debug__/ws?role=shell';
   var ws = null;
   var reconnectAttempts = 0;
 
@@ -249,7 +249,7 @@ const debugInjectJS = `(function() {
   }
 
   var ws = null;
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + _basePath + '/__agent-reverse-proxy-debug__/ws';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + _basePath + '/__agent-reverse-proxy-debug__/ws?role=inject';
   var messageQueue = [];
   var reconnectAttempts = 0;
   var maxReconnectAttempts = 5;
