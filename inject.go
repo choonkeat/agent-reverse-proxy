@@ -101,7 +101,7 @@ const previewProxyErrorPage = `<!DOCTYPE html>
         <h1>App Preview</h1>
         <div class="instruction">
             <div class="instruction-label">Tell your agent:</div>
-            <div class="instruction-text">Start a hot-reload web app on <span class="port">localhost:%s</span></div>
+            <div class="instruction-text">Start a hot-reload web app on <span class="port">%s</span></div>
         </div>
         <div class="status">
             <span class="status-dot"></span>

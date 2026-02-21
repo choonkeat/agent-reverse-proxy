@@ -18,7 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const proxyVersion = "0.1.1"
+const proxyVersion = "0.1.3"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -27,6 +27,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
+	appHostFlag := flag.String("app-host", "", "Hostname of the user's app (default: $APP_HOST or localhost)")
 	appPortFlag := flag.Int("app-port", 0, "Port of the user's app (default: $APP_PORT or $PORT or 3000)")
 	proxyPortFlag := flag.Int("proxy-port", 0, "Port for the proxy HTTP server (default: $PROXY_PORT or 20000+app-port)")
 	noInject := flag.Bool("no-inject", false, "Disable debug script injection (plain reverse proxy)")
@@ -35,6 +36,7 @@ func main() {
 	themeCookie := flag.String("theme-cookie", "agent-reverse-proxy-theme", "Cookie name for light/dark theme on the error page")
 	flag.Parse()
 
+	appHost := resolveAppHost(*appHostFlag)
 	appPort := resolveAppPort(*appPortFlag)
 	proxyPort := resolveProxyPort(*proxyPortFlag, appPort)
 
@@ -52,18 +54,19 @@ func main() {
 	registerTools(server, hub, prefix)
 	registerResources(server, prefix)
 
-	targetURL, err := url.Parse(fmt.Sprintf("http://localhost:%d", appPort))
+	targetURL, err := url.Parse(fmt.Sprintf("http://%s:%d", appHost, appPort))
 	if err != nil {
 		log.Fatalf("invalid target URL: %v", err)
 	}
 
-	baseURL, ln, err := startHTTPServer(server, hub, targetURL, strconv.Itoa(appPort), proxyPort, *noInject, *themeCookie)
+	appAddr := fmt.Sprintf("%s:%d", appHost, appPort)
+	baseURL, ln, err := startHTTPServer(server, hub, targetURL, appAddr, proxyPort, *noInject, *themeCookie)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
 	_ = ln
 
-	fmt.Fprintf(os.Stderr, "Reverse proxy: %s -> localhost:%d\n", baseURL, appPort)
+	fmt.Fprintf(os.Stderr, "Reverse proxy: %s -> %s:%d\n", baseURL, appHost, appPort)
 	fmt.Fprintf(os.Stderr, "MCP endpoint: POST %s/mcp\n", baseURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -79,6 +82,17 @@ func main() {
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
 	}
+}
+
+// resolveAppHost determines the app host from flag, env var, or default.
+func resolveAppHost(flagVal string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	if s := os.Getenv("APP_HOST"); s != "" {
+		return s
+	}
+	return "localhost"
 }
 
 // resolveAppPort determines the app port from flag, env vars, or default.
@@ -113,7 +127,7 @@ func resolveProxyPort(flagVal, appPort int) int {
 }
 
 // startHTTPServer starts the HTTP server with proxy, debug endpoints, and MCP.
-func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, appPortStr string, proxyPort int, noInject bool, themeCookie string) (string, net.Listener, error) {
+func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, appAddr string, proxyPort int, noInject bool, themeCookie string) (string, net.Listener, error) {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return mcpServer
 	}, &mcp.StreamableHTTPOptions{
@@ -154,7 +168,7 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 	})
 
 	// Reverse proxy (catch-all)
-	mux.HandleFunc("/", handleProxyRequest(targetURL, appPortStr, noInject, themeCookie))
+	mux.HandleFunc("/", handleProxyRequest(targetURL, appAddr, noInject, themeCookie))
 
 	addr := fmt.Sprintf("0.0.0.0:%d", proxyPort)
 	ln, err := net.Listen("tcp", addr)
