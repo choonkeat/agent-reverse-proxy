@@ -224,6 +224,13 @@ const shellPageHTML = `<!DOCTYPE html>
     send({ t: 'navstate', canGoBack: _shellNavIdx > 0, canGoForward: _shellNavIdx < _shellNavMax });
   };
 
+  // Relay nav messages from inject.js (postMessage) to hub via WS
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.__arpNav) {
+      var msg = {}; for (var k in e.data) { if (k !== '__arpNav') msg[k] = e.data[k]; } send(msg);
+    }
+  });
+
   connect();
 })();
 </script>
@@ -447,7 +454,7 @@ const debugInjectJS = `(function() {
   }
 
   function sendNavState() {
-    send({ t: 'navstate', canGoBack: _navIdx > 0, canGoForward: _navIdx < _navMax });
+    window.parent.postMessage({ __arpNav: true, t: 'navstate', canGoBack: _navIdx > 0, canGoForward: _navIdx < _navMax }, '*');
   }
 
   // URL change detection for SPA navigations
@@ -455,7 +462,7 @@ const debugInjectJS = `(function() {
   function checkUrl() {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
-      send({ t: 'urlchange', url: location.href, ts: Date.now() });
+      window.parent.postMessage({ __arpNav: true, t: 'urlchange', url: location.href, ts: Date.now() }, '*');
     }
   }
 
@@ -543,7 +550,7 @@ const debugInjectJS = `(function() {
   // Connect to debug channel
   connect();
 
-  // Send initial page load message (navstate sent by shell page on onload)
-  send({ t: 'init', url: location.href, ts: Date.now() });
+  // Send initial page load message via postMessage to shell page
+  window.parent.postMessage({ __arpNav: true, t: 'init', url: location.href, ts: Date.now() }, '*');
 })();
 `

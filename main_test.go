@@ -427,6 +427,38 @@ func TestDebugHubInProcessListen(t *testing.T) {
 	}
 }
 
+func TestNavMessageConsolidation(t *testing.T) {
+	t.Run("inject.js does not send nav messages directly via WS", func(t *testing.T) {
+		// These patterns would indicate direct WS sends of nav messages.
+		// After consolidation, inject.js uses postMessage instead.
+		directNavSends := []string{
+			`send({ t: 'init'`,
+			`send({ t: 'urlchange'`,
+			`send({ t: 'navstate'`,
+		}
+		for _, pattern := range directNavSends {
+			if strings.Contains(debugInjectJS, pattern) {
+				t.Errorf("inject.js should NOT contain direct WS send %q — use postMessage instead", pattern)
+			}
+		}
+	})
+
+	t.Run("inject.js uses postMessage with __arpNav for nav messages", func(t *testing.T) {
+		if !strings.Contains(debugInjectJS, "window.parent.postMessage") {
+			t.Error("inject.js should use window.parent.postMessage for nav messages")
+		}
+		if !strings.Contains(debugInjectJS, "__arpNav") {
+			t.Error("inject.js postMessages should include __arpNav marker")
+		}
+	})
+
+	t.Run("shell page contains __arpNav relay listener", func(t *testing.T) {
+		if !strings.Contains(shellPageHTML, "__arpNav") {
+			t.Error("shell page should contain __arpNav message relay listener")
+		}
+	})
+}
+
 func TestDebugHubSelectiveRouting(t *testing.T) {
 	hub := NewDebugHub()
 
