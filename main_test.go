@@ -453,7 +453,7 @@ func TestWebSocketProxyRelay(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -489,7 +489,7 @@ func TestNormalHTTPThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -507,7 +507,7 @@ func TestNormalHTTPThroughProxy(t *testing.T) {
 func TestWebSocketProxyBackendDown(t *testing.T) {
 	backendURL, _ := url.Parse("http://127.0.0.1:1")
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, "1", false, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, "1", false, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -531,7 +531,7 @@ func TestHTMLInjectionThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -556,7 +556,7 @@ func TestNoInjectionForNonHTML(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -581,7 +581,7 @@ func TestNoInjectFlag(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), true /* noInject */, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), true /* noInject */, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -611,7 +611,7 @@ func TestGzipHTMLInjectionThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -650,7 +650,7 @@ func TestLocationHeaderRewriting(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -686,7 +686,7 @@ func TestLocationHeaderRelativeUnchanged(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -728,7 +728,7 @@ func TestLocationHeaderWithCookies(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, ""))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -1116,5 +1116,238 @@ func TestShellPageBasePathRewrite(t *testing.T) {
 
 	if !strings.Contains(string(body), "/myproxy/__agent-reverse-proxy-debug__/ws") {
 		t.Error("shell page should contain base-path-aware WS URL")
+	}
+}
+
+// --- Dynamic proxy rewriting tests ---
+
+func TestRewriteAbsolutePaths(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		prefix string
+		want   string
+	}{
+		{
+			name:   "href absolute path",
+			input:  `<a href="/step/3">Next</a>`,
+			prefix: "/http/localhost:9876",
+			want:   `<a href="/http/localhost:9876/step/3">Next</a>`,
+		},
+		{
+			name:   "src absolute path",
+			input:  `<script src="/static/final.js"></script>`,
+			prefix: "/http/localhost:9876",
+			want:   `<script src="/http/localhost:9876/static/final.js"></script>`,
+		},
+		{
+			name:   "action absolute path",
+			input:  `<form action="/step/7">`,
+			prefix: "/http/localhost:9876",
+			want:   `<form action="/http/localhost:9876/step/7">`,
+		},
+		{
+			name:   "fetch absolute path",
+			input:  `fetch('/api/step4')`,
+			prefix: "/http/localhost:9876",
+			want:   `fetch('/http/localhost:9876/api/step4')`,
+		},
+		{
+			name:   "css url absolute path",
+			input:  `background: url(/static/check.png);`,
+			prefix: "/http/localhost:9876",
+			want:   `background: url(/http/localhost:9876/static/check.png);`,
+		},
+		{
+			name:   "css url with quotes",
+			input:  `background: url("/static/check.png");`,
+			prefix: "/http/localhost:9876",
+			want:   `background: url("/http/localhost:9876/static/check.png");`,
+		},
+		{
+			name:   "protocol-relative URL unchanged",
+			input:  `<a href="//cdn.example.com/lib.js">`,
+			prefix: "/http/localhost:9876",
+			want:   `<a href="//cdn.example.com/lib.js">`,
+		},
+		{
+			name:   "relative path unchanged",
+			input:  `<a href="styles/home.css">`,
+			prefix: "/http/localhost:9876",
+			want:   `<a href="styles/home.css">`,
+		},
+		{
+			name:   "multiple rewrites in one document",
+			input:  `<link href="/static/final.css"><script src="/static/final.js"></script>`,
+			prefix: "/http/localhost:9876",
+			want:   `<link href="/http/localhost:9876/static/final.css"><script src="/http/localhost:9876/static/final.js"></script>`,
+		},
+		{
+			name:   "no prefix means no rewrite",
+			input:  `<a href="/step/3">Next</a>`,
+			prefix: "",
+			want:   `<a href="/step/3">Next</a>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.prefix == "" {
+				// Empty prefix: rewriteAbsolutePaths should not be called
+				return
+			}
+			got := string(rewriteAbsolutePaths([]byte(tt.input), tt.prefix))
+			if got != tt.want {
+				t.Errorf("rewriteAbsolutePaths(%q, %q)\ngot:  %q\nwant: %q", tt.input, tt.prefix, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDynamicProxyLocationRewrite(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/step/7" && r.Method == "POST" {
+			// Absolute redirect
+			w.Header().Set("Location", "http://"+r.Host+"/step/8")
+			w.WriteHeader(http.StatusFound)
+			return
+		}
+		if r.URL.Path == "/relative-redirect" {
+			// Relative redirect
+			w.Header().Set("Location", "/dest")
+			w.WriteHeader(http.StatusFound)
+			return
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	host := backendURL.Host
+
+	p, err := New(Config{
+		Target:      nil, // dynamic mode
+		NoInject:    true,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	proxyURL, _ := url.Parse(server.URL)
+
+	t.Run("absolute Location includes dynamic prefix", func(t *testing.T) {
+		resp, err := client.Post(server.URL+"/http/"+host+"/step/7", "", nil)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		loc := resp.Header.Get("Location")
+		expected := "http://" + proxyURL.Host + "/http/" + host + "/step/8"
+		if loc != expected {
+			t.Errorf("Location header\ngot:  %s\nwant: %s", loc, expected)
+		}
+	})
+
+	t.Run("relative Location includes dynamic prefix", func(t *testing.T) {
+		resp, err := client.Get(server.URL + "/http/" + host + "/relative-redirect")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		loc := resp.Header.Get("Location")
+		expected := "/http/" + host + "/dest"
+		if loc != expected {
+			t.Errorf("Location header\ngot:  %s\nwant: %s", loc, expected)
+		}
+	})
+}
+
+func TestDynamicProxyHTMLRewrite(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Test</title></head><body><a href="/step/3">Next</a><script src="/static/final.js"></script></body></html>`))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	host := backendURL.Host
+
+	p, err := New(Config{
+		Target:      nil,
+		NoInject:    true,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/http/" + host + "/page")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	prefix := "/http/" + host
+	if !strings.Contains(bodyStr, `href="`+prefix+`/step/3"`) {
+		t.Errorf("expected href to be rewritten with prefix, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, `src="`+prefix+`/static/final.js"`) {
+		t.Errorf("expected src to be rewritten with prefix, got: %s", bodyStr)
+	}
+}
+
+func TestDynamicProxyCSSRewrite(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css")
+		w.Write([]byte(`.check { background: url(/static/check.png) no-repeat; }`))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	host := backendURL.Host
+
+	p, err := New(Config{
+		Target:      nil,
+		NoInject:    true,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/http/" + host + "/styles/home.css")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	expected := "url(/http/" + host + "/static/check.png)"
+	if !strings.Contains(string(body), expected) {
+		t.Errorf("expected CSS url() to be rewritten\ngot:  %s\nwant to contain: %s", body, expected)
 	}
 }

@@ -10,10 +10,24 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// absPathRewriteRe matches absolute paths in HTML attributes and CSS url() that need
+// prefixing in dynamic proxy mode. It captures the context (href=", src=", etc.) and
+// the leading slash+char, avoiding protocol-relative URLs (//...).
+var absPathRewriteRe = regexp.MustCompile(
+	`((?:href|src|action)\s*=\s*["']|fetch\(\s*["']|url\(\s*["']?)(/[^/"'])`,
+)
+
+// rewriteAbsolutePaths inserts prefix before absolute paths in HTML and CSS content.
+func rewriteAbsolutePaths(body []byte, prefix string) []byte {
+	replacement := []byte("${1}" + prefix + "${2}")
+	return absPathRewriteRe.ReplaceAll(body, replacement)
+}
 
 // injectDebugScript injects the given script tag after the FIRST <head> or <body> tag only
 func injectDebugScript(body []byte, scriptTag string) []byte {
@@ -57,7 +71,9 @@ func modifyCSPHeader(h http.Header) {
 
 // handleProxyRequest proxies requests to the user's app at the given target URL.
 // If noInject is true, HTML injection is disabled (plain reverse proxy).
-func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string, scriptTag string) http.HandlerFunc {
+// pathPrefix is the dynamic-mode path prefix (e.g. "/http/localhost:8080") to
+// prepend to absolute paths in responses; pass "" in fixed mode.
+func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string, scriptTag string, pathPrefix string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade detection: relay raw bytes instead of HTTP proxy
 		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
@@ -118,12 +134,13 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 		defer resp.Body.Close()
 
 		// Process response (inject debug script for HTML, handle cookies)
-		processProxyResponse(w, r, resp, target, noInject, scriptTag)
+		processProxyResponse(w, r, resp, target, noInject, scriptTag, pathPrefix)
 	}
 }
 
-// processProxyResponse handles the response: injects debug script for HTML, strips Domain from cookies
-func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string) {
+// processProxyResponse handles the response: injects debug script for HTML, strips Domain from cookies,
+// and rewrites absolute paths when pathPrefix is set (dynamic proxy mode).
+func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string, pathPrefix string) {
 	// Copy response headers, handling cookies specially
 	for key, values := range resp.Header {
 		if isHopByHopHeader(key) {
@@ -136,6 +153,10 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 				cookie.Domain = ""
 				// Also strip Secure flag if we're proxying (allows cookies over non-HTTPS proxy)
 				cookie.Secure = false
+				// Prepend pathPrefix to cookie path in dynamic mode
+				if pathPrefix != "" && cookie.Path != "" {
+					cookie.Path = pathPrefix + cookie.Path
+				}
 				http.SetCookie(w, cookie)
 			}
 			continue
@@ -149,9 +170,13 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 				proxyScheme = "https"
 			}
 			backendOrigin := target.Scheme + "://" + target.Host
-			proxyOrigin := proxyScheme + "://" + r.Host
+			proxyOrigin := proxyScheme + "://" + r.Host + pathPrefix
 			for _, value := range values {
 				rewritten := strings.Replace(value, backendOrigin, proxyOrigin, 1)
+				// In dynamic mode, also rewrite relative Location headers (e.g. "/step/8")
+				if pathPrefix != "" && rewritten == value && strings.HasPrefix(value, "/") {
+					rewritten = pathPrefix + value
+				}
 				w.Header().Add(key, rewritten)
 			}
 			continue
@@ -161,16 +186,22 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 		}
 	}
 
-	// Check if HTML for debug script injection
+	// Determine if we need to buffer and rewrite the body
 	contentType := resp.Header.Get("Content-Type")
-	if noInject || !strings.Contains(contentType, "text/html") {
-		// Non-HTML or injection disabled: pass through as-is
+	isHTML := strings.Contains(contentType, "text/html")
+	isCSS := strings.Contains(contentType, "text/css")
+	needsRewrite := pathPrefix != "" && (isHTML || isCSS)
+	needsInject := isHTML && !noInject
+	needsBuffer := needsRewrite || needsInject
+
+	if !needsBuffer {
+		// Stream through as-is
 		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body)
 		return
 	}
 
-	// HTML response: read, decompress if needed, inject script
+	// Buffer the response body, decompressing if needed
 	var body []byte
 	var readErr error
 
@@ -201,18 +232,23 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 		return
 	}
 
-	// Inject the debug script
-	injected := injectDebugScript(body, scriptTag)
+	// Rewrite absolute paths in dynamic mode
+	if needsRewrite {
+		body = rewriteAbsolutePaths(body, pathPrefix)
+	}
 
-	// Modify CSP header if present
-	modifyCSPHeader(w.Header())
+	// Inject the debug script for HTML
+	if needsInject {
+		body = injectDebugScript(body, scriptTag)
+		modifyCSPHeader(w.Header())
+	}
 
 	// Update content length and remove encoding (we decompressed)
-	w.Header().Set("Content-Length", strconv.Itoa(len(injected)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.Header().Del("Content-Encoding")
 
 	w.WriteHeader(resp.StatusCode)
-	w.Write(injected)
+	w.Write(body)
 }
 
 // handleWebSocketRelay hijacks the client connection and relays raw bytes

@@ -22,19 +22,30 @@ func main() {
 	appHostFlag := flag.String("app-host", "", "Hostname of the user's app (default: $APP_HOST or localhost)")
 	appPortFlag := flag.Int("app-port", 0, "Port of the user's app (default: $APP_PORT or $PORT or 3000)")
 	proxyPortFlag := flag.Int("proxy-port", 0, "Port for the proxy HTTP server (default: $PROXY_PORT or 20000+app-port)")
+	dynamic := flag.Bool("dynamic", false, "Dynamic target mode: target URL extracted from request path")
 	noInject := flag.Bool("no-inject", false, "Disable debug script injection (plain reverse proxy)")
 	noStdio := flag.Bool("no-stdio", false, "Disable stdio MCP transport (HTTP MCP only)")
 	toolPrefix := flag.String("tool-prefix", "proxied", "Prefix for MCP tool names (e.g. 'preview' gives preview_browser_snapshot)")
 	themeCookie := flag.String("theme-cookie", "agent-reverse-proxy-theme", "Cookie name for light/dark theme on the error page")
 	flag.Parse()
 
-	appHost := resolveAppHost(*appHostFlag)
-	appPort := resolveAppPort(*appPortFlag)
-	proxyPort := resolveProxyPort(*proxyPortFlag, appPort)
+	var targetURL *url.URL
+	var proxyPort int
 
-	targetURL, err := url.Parse(fmt.Sprintf("http://%s:%d", appHost, appPort))
-	if err != nil {
-		log.Fatalf("invalid target URL: %v", err)
+	if *dynamic {
+		// Dynamic mode: no fixed target, resolve proxy port without app port
+		proxyPort = resolveDynamicProxyPort(*proxyPortFlag)
+	} else {
+		// Fixed target mode
+		appHost := resolveAppHost(*appHostFlag)
+		appPort := resolveAppPort(*appPortFlag)
+		proxyPort = resolveProxyPort(*proxyPortFlag, appPort)
+
+		var err error
+		targetURL, err = url.Parse(fmt.Sprintf("http://%s:%d", appHost, appPort))
+		if err != nil {
+			log.Fatalf("invalid target URL: %v", err)
+		}
 	}
 
 	proxy, err := agentproxy.New(agentproxy.Config{
@@ -74,7 +85,11 @@ func main() {
 	}()
 
 	baseURL := fmt.Sprintf("http://localhost:%d", actualPort)
-	fmt.Fprintf(os.Stderr, "Reverse proxy: %s -> %s:%d\n", baseURL, appHost, appPort)
+	if *dynamic {
+		fmt.Fprintf(os.Stderr, "Reverse proxy (dynamic): %s/{scheme}/{host:port}/{path}\n", baseURL)
+	} else {
+		fmt.Fprintf(os.Stderr, "Reverse proxy: %s -> %s\n", baseURL, targetURL.String())
+	}
 	fmt.Fprintf(os.Stderr, "MCP endpoint: POST %s/mcp\n", baseURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,4 +147,23 @@ func resolveProxyPort(flagVal, appPort int) int {
 		}
 	}
 	return 20000 + appPort
+}
+
+// resolveDynamicProxyPort determines the proxy port in dynamic mode.
+// Checks: flag → PORT env → PROXY_PORT env → default 3004.
+func resolveDynamicProxyPort(flagVal int) int {
+	if flagVal > 0 {
+		return flagVal
+	}
+	if s := os.Getenv("PORT"); s != "" {
+		if p, err := strconv.Atoi(s); err == nil && p > 0 {
+			return p
+		}
+	}
+	if s := os.Getenv("PROXY_PORT"); s != "" {
+		if p, err := strconv.Atoi(s); err == nil && p > 0 {
+			return p
+		}
+	}
+	return 3004
 }

@@ -110,9 +110,9 @@ func New(cfg Config) (*Proxy, error) {
 	// Reverse proxy catch-all
 	p.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Target != nil {
-			// Fixed target mode
+			// Fixed target mode — no path prefix needed
 			appAddr := cfg.Target.Host
-			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag())(w, r)
+			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag(), "")(w, r)
 		} else {
 			// Dynamic target mode
 			p.handleDynamicProxy(w, r)
@@ -208,8 +208,9 @@ func (p *Proxy) handleDynamicProxy(w http.ResponseWriter, r *http.Request) {
 	r.URL.Path = remainder
 	r.URL.RawPath = ""
 
+	pathPrefix := p.basePath + "/" + target.Scheme + "/" + target.Host
 	appAddr := target.Host
-	handleProxyRequest(target, appAddr, p.config.NoInject, p.config.ThemeCookie, p.scriptTag())(w, r)
+	handleProxyRequest(target, appAddr, p.config.NoInject, p.config.ThemeCookie, p.scriptTag(), pathPrefix)(w, r)
 }
 
 // extractTarget parses a path like "http/localhost:8080/hello/world" into

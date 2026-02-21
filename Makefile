@@ -1,4 +1,4 @@
-.PHONY: build test build-platforms publish-dry publish bump example-serve example-test example-run
+.PHONY: build test build-platforms publish-dry publish bump example-serve example-test example-run example-dynamic-run
 
 build:
 	go build -o dist/agent-reverse-proxy ./cmd/agent-reverse-proxy
@@ -47,3 +47,19 @@ example-run:
 		trap "kill $$PID 2>/dev/null; wait $$PID 2>/dev/null" EXIT; \
 		for i in $$(seq 1 30); do curl -sf http://localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
 		cd cmd/example && TARGET_URL=$(TARGET_URL) node test.mjs'
+
+DYNAMIC_PROXY_PORT ?= $(or $(PORT),3004)
+
+example-dynamic-run:
+	go build -o dist/example-server ./cmd/example
+	go build -o dist/agent-reverse-proxy ./cmd/agent-reverse-proxy
+	cd cmd/example && npm install --silent
+	@bash -c '\
+		PORT=$(EXAMPLE_PORT) ./dist/example-server & \
+		APP_PID=$$!; \
+		./dist/agent-reverse-proxy --dynamic --proxy-port $(DYNAMIC_PROXY_PORT) --no-stdio --no-inject & \
+		PROXY_PID=$$!; \
+		trap "kill $$APP_PID $$PROXY_PID 2>/dev/null; wait $$APP_PID $$PROXY_PID 2>/dev/null" EXIT; \
+		for i in $$(seq 1 30); do curl -sf http://localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
+		for i in $$(seq 1 30); do curl -sf http://localhost:$(DYNAMIC_PROXY_PORT)/http/localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
+		cd cmd/example && TARGET_URL=http://localhost:$(DYNAMIC_PROXY_PORT)/http/localhost:$(EXAMPLE_PORT) node test.mjs'
