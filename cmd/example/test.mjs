@@ -55,13 +55,18 @@ async function run() {
   });
 
   try {
-    // Step 1: Relative CSS & Links
-    console.log('Step 1: Relative CSS & Links');
+    // Step 1: Relative CSS & Links + CSS url() references
+    console.log('Step 1: Relative CSS & Links + CSS url()');
     await page.goto(TARGET_URL + '/');
     await page.waitForSelector('#step-info');
     const stepInfo = await page.textContent('#step-info');
     if (!stepInfo.includes('relative CSS works')) {
       throw new Error(`Step 1 failed: unexpected content "${stepInfo}"`);
+    }
+    await page.waitForSelector('#next', { state: 'visible', timeout: 10000 });
+    const cssUrlStatus = await page.textContent('#css-url-status');
+    if (cssUrlStatus !== 'CSS_URLS_OK') {
+      throw new Error(`Step 1 failed: css-url-status="${cssUrlStatus}"`);
     }
     await page.click('#next');
 
@@ -89,9 +94,10 @@ async function run() {
     }, { timeout: 10000 });
     await page.click('#next');
 
-    // Step 5: Set Cookie
+    // Step 5: Set Cookie (JS-verified)
     console.log('Step 5: Set Cookie');
     await page.waitForSelector('#cookie-info');
+    await page.waitForSelector('#next', { state: 'visible', timeout: 10000 });
     await page.click('#next');
 
     // Step 6: Read Cookie

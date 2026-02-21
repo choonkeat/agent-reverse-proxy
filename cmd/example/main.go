@@ -3,11 +3,25 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"log"
 	"net/http"
 	"os"
 )
+
+var greenPNG []byte
+
+func init() {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{0, 255, 0, 255})
+	var buf bytes.Buffer
+	png.Encode(&buf, img)
+	greenPNG = buf.Bytes()
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -29,7 +43,26 @@ func main() {
 </head><body>
 <h1>Step 1: Relative CSS &amp; Links</h1>
 <p id="step-info">If you can see this styled, relative CSS works.</p>
-<a id="next" href="step/2">Next &rarr;</a>
+<div id="css-bg-relative" style="height:1px;overflow:hidden"></div>
+<div id="css-bg-absolute" style="height:1px;overflow:hidden"></div>
+<p id="css-url-status">Checking CSS urls...</p>
+<a id="next" href="step/2" style="display:none">Next &rarr;</a>
+<script>
+(function() {
+  var interval = setInterval(function() {
+    var info = getComputedStyle(document.getElementById('step-info'));
+    var bgRel = getComputedStyle(document.getElementById('css-bg-relative')).backgroundImage;
+    var bgAbs = getComputedStyle(document.getElementById('css-bg-absolute')).backgroundImage;
+    var cssLoaded = (info.color === 'rgb(0, 128, 0)');
+    var urlsOk = bgRel !== 'none' && bgAbs !== 'none';
+    if (cssLoaded && urlsOk) {
+      clearInterval(interval);
+      document.getElementById('css-url-status').textContent = 'CSS_URLS_OK';
+      document.getElementById('next').style.display = '';
+    }
+  }, 100);
+})();
+</script>
 </body></html>`)
 	})
 
@@ -38,7 +71,9 @@ func main() {
 		w.Header().Set("Content-Type", "text/css")
 		fmt.Fprint(w, `body { font-family: sans-serif; margin: 2rem; }
 #step-info { color: green; }
-a#next { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }`)
+a#next { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+#css-bg-relative { background-image: url(bg-check.png); }
+#css-bg-absolute { background-image: url(/static/check.png); }`)
 	})
 
 	// Step 2: relative JS (src="step2.js" resolves to /step/step2.js)
@@ -118,7 +153,13 @@ fetch('/api/step4').then(r => r.json()).then(d => {
 		fmt.Fprint(w, `<!DOCTYPE html><html><head></head><body>
 <h1>Step 5: Set Cookie</h1>
 <p id="cookie-info">Cookie "proxytest=hello123" has been set.</p>
-<a id="next" href="/step/6">Next &rarr;</a>
+<a id="next" href="/step/6" style="display:none">Next &rarr;</a>
+<script>
+if (document.cookie.indexOf('proxytest=hello123') !== -1) {
+  document.getElementById('cookie-info').textContent += ' Verified in JS.';
+  document.getElementById('next').style.display = '';
+}
+</script>
 </body></html>`)
 	})
 
@@ -183,6 +224,7 @@ fetch('/api/step4').then(r => r.json()).then(d => {
 <h1>Step 8: Final Verification</h1>
 <p id="cookie-status">%s</p>
 <p id="js-check">Waiting for JS...</p>
+<div id="css-bg-check" style="height:1px;overflow:hidden"></div>
 <p id="result">PENDING</p>
 <script src="/static/final.js"></script>
 </body></html>`, cookieStatus)
@@ -192,7 +234,8 @@ fetch('/api/step4').then(r => r.json()).then(d => {
 	mux.HandleFunc("/static/final.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css")
 		fmt.Fprint(w, `body { font-family: sans-serif; margin: 2rem; }
-#result { font-size: 1.5rem; font-weight: bold; margin-top: 1rem; }`)
+#result { font-size: 1.5rem; font-weight: bold; margin-top: 1rem; }
+#css-bg-check { background-image: url(final-bg.png); }`)
 	})
 
 	// Static JS for step 8 — checks cookies + asset loading before declaring success
@@ -202,15 +245,26 @@ fetch('/api/step4').then(r => r.json()).then(d => {
   document.getElementById('js-check').textContent = 'ASSETS_OK';
   var cookieOk = document.getElementById('cookie-status').textContent === 'ALL_COOKIES_OK';
   var assetsOk = document.getElementById('js-check').textContent === 'ASSETS_OK';
-  if (cookieOk && assetsOk) {
+  var cssBg = getComputedStyle(document.getElementById('css-bg-check')).backgroundImage;
+  var cssBgOk = cssBg !== 'none';
+  if (cookieOk && assetsOk && cssBgOk) {
     document.getElementById('result').textContent = 'ALL STEPS PASSED';
     document.getElementById('result').style.color = 'green';
   } else {
-    document.getElementById('result').textContent = 'FAILED';
+    document.getElementById('result').textContent = 'FAILED: cookies=' + cookieOk + ' assets=' + assetsOk + ' cssBg=' + cssBgOk;
     document.getElementById('result').style.color = 'red';
   }
 })();`)
 	})
+
+	// 1x1 green PNG for CSS url() tests
+	servePNG := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(greenPNG)
+	}
+	mux.HandleFunc("/styles/bg-check.png", servePNG)  // relative url() from /styles/home.css
+	mux.HandleFunc("/static/check.png", servePNG)      // absolute url() from /styles/home.css
+	mux.HandleFunc("/static/final-bg.png", servePNG)   // relative url() from /static/final.css
 
 	log.Printf("Example server listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
