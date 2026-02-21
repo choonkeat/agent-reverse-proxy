@@ -24,7 +24,7 @@ bump:
 	@echo "Bumping version to $(VERSION)..."
 	@sed -i 's/"version": "[^"]*"/"version": "$(VERSION)"/' package.json
 	@sed -i 's/"@choonkeat\/agent-reverse-proxy-\([^"]*\)": "[^"]*"/"@choonkeat\/agent-reverse-proxy-\1": "$(VERSION)"/' package.json
-	@sed -i 's/proxyVersion = "[^"]*"/proxyVersion = "$(VERSION)"/' main.go
+	@sed -i 's/ProxyVersion = "[^"]*"/ProxyVersion = "$(VERSION)"/' main.go
 	@echo "Version bumped to $(VERSION)"
 
 EXAMPLE_PORT ?= 9876
