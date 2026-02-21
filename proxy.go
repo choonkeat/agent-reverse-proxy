@@ -143,7 +143,9 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 		// Rewrite Location header to point to proxy instead of backend
 		if strings.EqualFold(key, "Location") {
 			proxyScheme := "http"
-			if r.TLS != nil {
+			if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+				proxyScheme = proto
+			} else if r.TLS != nil {
 				proxyScheme = "https"
 			}
 			backendOrigin := target.Scheme + "://" + target.Host
