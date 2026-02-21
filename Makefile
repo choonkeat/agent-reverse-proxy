@@ -1,4 +1,4 @@
-.PHONY: build test build-platforms publish-dry publish bump
+.PHONY: build test build-platforms publish-dry publish bump example-run
 
 build:
 	go build -o dist/agent-reverse-proxy .
@@ -26,3 +26,16 @@ bump:
 	@sed -i 's/"@choonkeat\/agent-reverse-proxy-\([^"]*\)": "[^"]*"/"@choonkeat\/agent-reverse-proxy-\1": "$(VERSION)"/' package.json
 	@sed -i 's/proxyVersion = "[^"]*"/proxyVersion = "$(VERSION)"/' main.go
 	@echo "Version bumped to $(VERSION)"
+
+EXAMPLE_PORT ?= 9876
+TARGET_URL ?= http://localhost:$(EXAMPLE_PORT)
+
+example-run:
+	go build -o dist/example-server ./cmd/example
+	cd cmd/example && npm install --silent
+	@bash -c '\
+		PORT=$(EXAMPLE_PORT) ./dist/example-server & \
+		PID=$$!; \
+		trap "kill $$PID 2>/dev/null; wait $$PID 2>/dev/null" EXIT; \
+		for i in $$(seq 1 30); do curl -sf http://localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
+		cd cmd/example && TARGET_URL=$(TARGET_URL) node test.mjs'

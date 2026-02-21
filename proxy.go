@@ -57,7 +57,7 @@ func modifyCSPHeader(h http.Header) {
 
 // handleProxyRequest proxies requests to the user's app at the given target URL.
 // If noInject is true, HTML injection is disabled (plain reverse proxy).
-func handleProxyRequest(target *url.URL, appPortStr string, noInject bool, themeCookie string) http.HandlerFunc {
+func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade detection: relay raw bytes instead of HTTP proxy
 		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
@@ -112,18 +112,18 @@ func handleProxyRequest(target *url.URL, appPortStr string, noInject bool, theme
 			log.Printf("Preview proxy error: %v", err)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appPortStr)
+			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appAddr)
 			return
 		}
 		defer resp.Body.Close()
 
 		// Process response (inject debug script for HTML, handle cookies)
-		processProxyResponse(w, resp, target, noInject)
+		processProxyResponse(w, r, resp, target, noInject)
 	}
 }
 
 // processProxyResponse handles the response: injects debug script for HTML, strips Domain from cookies
-func processProxyResponse(w http.ResponseWriter, resp *http.Response, target *url.URL, noInject bool) {
+func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool) {
 	// Copy response headers, handling cookies specially
 	for key, values := range resp.Header {
 		if isHopByHopHeader(key) {
@@ -137,6 +137,20 @@ func processProxyResponse(w http.ResponseWriter, resp *http.Response, target *ur
 				// Also strip Secure flag if we're proxying (allows cookies over non-HTTPS proxy)
 				cookie.Secure = false
 				http.SetCookie(w, cookie)
+			}
+			continue
+		}
+		// Rewrite Location header to point to proxy instead of backend
+		if strings.EqualFold(key, "Location") {
+			proxyScheme := "http"
+			if r.TLS != nil {
+				proxyScheme = "https"
+			}
+			backendOrigin := target.Scheme + "://" + target.Host
+			proxyOrigin := proxyScheme + "://" + r.Host
+			for _, value := range values {
+				rewritten := strings.Replace(value, backendOrigin, proxyOrigin, 1)
+				w.Header().Add(key, rewritten)
 			}
 			continue
 		}

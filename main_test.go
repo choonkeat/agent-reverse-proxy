@@ -695,3 +695,150 @@ func TestDebugEndpointPaths(t *testing.T) {
 		t.Errorf("inject.js should connect to %s", expectedIframePath)
 	}
 }
+
+// --- Location header rewriting tests ---
+
+func TestLocationHeaderRewriting(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Redirect using the backend's own full URL
+		w.Header().Set("Location", "http://"+r.Host+"/dest")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	proxyMux := http.NewServeMux()
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme"))
+	proxy := httptest.NewServer(proxyMux)
+	defer proxy.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(proxy.URL + "/source")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected 302, got %d", resp.StatusCode)
+	}
+
+	loc := resp.Header.Get("Location")
+	proxyURL, _ := url.Parse(proxy.URL)
+	expected := "http://" + proxyURL.Host + "/dest"
+	if loc != expected {
+		t.Errorf("Location header not rewritten\ngot:  %s\nwant: %s", loc, expected)
+	}
+}
+
+func TestLocationHeaderRelativeUnchanged(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/relative/path")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	proxyMux := http.NewServeMux()
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme"))
+	proxy := httptest.NewServer(proxyMux)
+	defer proxy.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(proxy.URL + "/source")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	loc := resp.Header.Get("Location")
+	if loc != "/relative/path" {
+		t.Errorf("relative Location should pass through unchanged\ngot:  %s\nwant: /relative/path", loc)
+	}
+}
+
+func TestLocationHeaderWithCookies(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123", Path: "/"})
+			w.Header().Set("Location", "http://"+r.Host+"/dashboard")
+			w.WriteHeader(http.StatusFound)
+			return
+		}
+		if r.URL.Path == "/dashboard" {
+			c, err := r.Cookie("session")
+			if err != nil || c.Value != "abc123" {
+				http.Error(w, "no cookie", http.StatusUnauthorized)
+				return
+			}
+			w.Write([]byte("OK"))
+		}
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	proxyMux := http.NewServeMux()
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme"))
+	proxy := httptest.NewServer(proxyMux)
+	defer proxy.Close()
+
+	proxyParsed, _ := url.Parse(proxy.URL)
+
+	// Step 1: hit /login, get cookie + rewritten Location
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(proxy.URL + "/login")
+	if err != nil {
+		t.Fatalf("login request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	// Verify redirect goes to proxy, not backend
+	loc := resp.Header.Get("Location")
+	if !strings.HasPrefix(loc, "http://"+proxyParsed.Host) {
+		t.Fatalf("Location should point to proxy, got: %s", loc)
+	}
+
+	// Verify cookie was set
+	cookies := resp.Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected Set-Cookie header")
+	}
+	found := false
+	for _, c := range cookies {
+		if c.Name == "session" && c.Value == "abc123" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("session cookie not found in response")
+	}
+
+	// Step 2: follow redirect manually with cookie
+	req, _ := http.NewRequest("GET", loc, nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "abc123"})
+	resp2, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("dashboard request failed: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 on dashboard, got %d", resp2.StatusCode)
+	}
+	body, _ := io.ReadAll(resp2.Body)
+	if string(body) != "OK" {
+		t.Errorf("expected OK, got %s", body)
+	}
+}
