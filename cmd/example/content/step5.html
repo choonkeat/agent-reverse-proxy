@@ -1,0 +1,11 @@
+<!DOCTYPE html><html><head></head><body>
+<h1>Step 5: Set Cookie</h1>
+<p id="cookie-info">Cookie "proxytest=hello123" has been set.</p>
+<a id="next" href="/step/6" style="display:none">Next &rarr;</a>
+<script>
+if (document.cookie.indexOf('proxytest=hello123') !== -1) {
+  document.getElementById('cookie-info').textContent += ' Verified in JS.';
+  document.getElementById('next').style.display = '';
+}
+</script>
+</body></html>

@@ -1,4 +1,4 @@
-.PHONY: build test build-platforms publish-dry publish bump example-run
+.PHONY: build test build-platforms publish-dry publish bump example-serve example-test example-run
 
 build:
 	go build -o dist/agent-reverse-proxy .
@@ -29,6 +29,14 @@ bump:
 
 EXAMPLE_PORT ?= 9876
 TARGET_URL ?= http://localhost:$(EXAMPLE_PORT)
+
+example-serve:
+	go build -o dist/example-server ./cmd/example
+	PORT=$(EXAMPLE_PORT) ./dist/example-server
+
+example-test:
+	cd cmd/example && npm install --silent
+	cd cmd/example && TARGET_URL=$(TARGET_URL) node test.mjs
 
 example-run:
 	go build -o dist/example-server ./cmd/example

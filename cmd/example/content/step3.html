@@ -1,0 +1,13 @@
+<!DOCTYPE html><html><head></head><body>
+<h1>Step 3: Relative Fetch</h1>
+<p id="fetch-status">Fetching...</p>
+<a id="next" href="/step/4" style="display:none">Next &rarr;</a>
+<script>
+fetch('3/data').then(r => r.json()).then(d => {
+  document.getElementById('fetch-status').textContent = d.message;
+  document.getElementById('next').style.display = '';
+}).catch(e => {
+  document.getElementById('fetch-status').textContent = 'FETCH_FAILED: ' + e.message;
+});
+</script>
+</body></html>

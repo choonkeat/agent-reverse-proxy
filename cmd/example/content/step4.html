@@ -1,0 +1,13 @@
+<!DOCTYPE html><html><head></head><body>
+<h1>Step 4: Absolute Path Fetch</h1>
+<p id="fetch-status">Fetching...</p>
+<a id="next" href="/step/5" style="display:none">Next &rarr;</a>
+<script>
+fetch('/api/step4').then(r => r.json()).then(d => {
+  document.getElementById('fetch-status').textContent = d.message;
+  document.getElementById('next').style.display = '';
+}).catch(e => {
+  document.getElementById('fetch-status').textContent = 'FETCH_FAILED: ' + e.message;
+});
+</script>
+</body></html>

@@ -1,0 +1,5 @@
+body { font-family: sans-serif; margin: 2rem; }
+#step-info { color: green; }
+a#next { display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+#css-bg-relative { background-image: url(bg-check.png); }
+#css-bg-absolute { background-image: url(/static/check.png); }

@@ -1,0 +1,26 @@
+<!DOCTYPE html><html><head>
+<link rel="stylesheet" href="styles/home.css">
+</head><body>
+<h1>Step 1: Relative CSS &amp; Links</h1>
+<p id="step-info">If you can see this styled, relative CSS works.</p>
+<div id="css-bg-relative" style="height:1px;overflow:hidden"></div>
+<div id="css-bg-absolute" style="height:1px;overflow:hidden"></div>
+<p id="css-url-status">Checking CSS urls...</p>
+<a id="next" href="step/2" style="display:none">Next &rarr;</a>
+<script>
+(function() {
+  var interval = setInterval(function() {
+    var info = getComputedStyle(document.getElementById('step-info'));
+    var bgRel = getComputedStyle(document.getElementById('css-bg-relative')).backgroundImage;
+    var bgAbs = getComputedStyle(document.getElementById('css-bg-absolute')).backgroundImage;
+    var cssLoaded = (info.color === 'rgb(0, 128, 0)');
+    var urlsOk = bgRel !== 'none' && bgAbs !== 'none';
+    if (cssLoaded && urlsOk) {
+      clearInterval(interval);
+      document.getElementById('css-url-status').textContent = 'CSS_URLS_OK';
+      document.getElementById('next').style.display = '';
+    }
+  }, 100);
+})();
+</script>
+</body></html>
