@@ -103,6 +103,11 @@ func New(cfg Config) (*Proxy, error) {
 			html = strings.ReplaceAll(html,
 				"/__agent-reverse-proxy-debug__/",
 				bp+"/__agent-reverse-proxy-debug__/")
+			// Inject base path so inner iframe src and navigate commands
+			// resolve relative to the proxy, not the host server root
+			html = strings.Replace(html,
+				"var _basePath = '';",
+				"var _basePath = '"+bp+"';", 1)
 		}
 		fmt.Fprintf(w, html)
 	})

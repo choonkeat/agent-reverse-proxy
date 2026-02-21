@@ -144,7 +144,8 @@ const shellPageHTML = `<!DOCTYPE html>
   var inner = document.getElementById('inner');
   var params = new URLSearchParams(location.search);
   var initialPath = params.get('path') || '/';
-  inner.src = initialPath;
+  var _basePath = '';
+  inner.src = _basePath + initialPath;
 
   // Shell-level navigation tracking for full-page (non-SPA) navigations
   var _shellNavIdx = 0;
@@ -188,7 +189,7 @@ const shellPageHTML = `<!DOCTYPE html>
               }
               inner.contentWindow.history.forward();
             } else if (cmd.url) {
-              inner.src = cmd.url;
+              inner.src = _basePath + cmd.url;
             }
           } else if (cmd.t === 'reload') {
             inner.contentWindow.location.reload();

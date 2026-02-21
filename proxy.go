@@ -43,7 +43,8 @@ func injectDebugScript(body []byte, scriptTag string) []byte {
 	return result
 }
 
-// modifyCSPHeader modifies Content-Security-Policy header to allow debug script and WebSocket
+// modifyCSPHeader modifies Content-Security-Policy header to allow debug script and WebSocket,
+// and removes frame-ancestors since proxied content is displayed in an iframe (shell page).
 func modifyCSPHeader(h http.Header) {
 	csp := h.Get("Content-Security-Policy")
 	if csp == "" {
@@ -66,7 +67,24 @@ func modifyCSPHeader(h http.Header) {
 		csp = csp + "; connect-src 'self' ws: wss:"
 	}
 
+	// Remove frame-ancestors directive — proxied content is always displayed in an
+	// iframe (shell page), so any restrictive frame-ancestors would break embedding.
+	csp = removeCSPDirective(csp, "frame-ancestors")
+
 	h.Set("Content-Security-Policy", csp)
+}
+
+// removeCSPDirective removes a named directive from a CSP string.
+func removeCSPDirective(csp, directive string) string {
+	parts := strings.Split(csp, ";")
+	filtered := parts[:0]
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if !strings.HasPrefix(trimmed, directive) {
+			filtered = append(filtered, part)
+		}
+	}
+	return strings.Join(filtered, ";")
 }
 
 // handleProxyRequest proxies requests to the user's app at the given target URL.
@@ -144,6 +162,10 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 	// Copy response headers, handling cookies specially
 	for key, values := range resp.Header {
 		if isHopByHopHeader(key) {
+			continue
+		}
+		// Strip X-Frame-Options — proxied content is displayed in an iframe (shell page)
+		if strings.EqualFold(key, "X-Frame-Options") {
 			continue
 		}
 		// Handle Set-Cookie specially to strip Domain attribute

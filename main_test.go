@@ -114,6 +114,16 @@ func TestModifyCSPHeader(t *testing.T) {
 			csp:      "default-src 'self'; script-src 'unsafe-inline'; connect-src https://api.example.com",
 			expected: "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss: https://api.example.com",
 		},
+		{
+			name:     "strips frame-ancestors none",
+			csp:      "default-src 'self'; frame-ancestors 'none'",
+			expected: "default-src 'self'; script-src 'self'; connect-src 'self' ws: wss:",
+		},
+		{
+			name:     "strips frame-ancestors self",
+			csp:      "frame-ancestors 'self'; script-src 'unsafe-inline'",
+			expected: " script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1249,6 +1259,70 @@ func TestShellPageBasePathRewrite(t *testing.T) {
 
 	if !strings.Contains(string(body), "/myproxy/__agent-reverse-proxy-debug__/ws") {
 		t.Error("shell page should contain base-path-aware WS URL")
+	}
+	if !strings.Contains(string(body), "var _basePath = '/myproxy';") {
+		t.Error("shell page should contain base-path-aware _basePath variable")
+	}
+	if !strings.Contains(string(body), "_basePath + initialPath") {
+		t.Error("shell page inner iframe src should use _basePath prefix")
+	}
+}
+
+func TestProxyStripsXFrameOptions(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Write([]byte(`<!DOCTYPE html><html><head></head><body>hello</body></html>`))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	p, err := New(Config{
+		Target:      backendURL,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if xfo := resp.Header.Get("X-Frame-Options"); xfo != "" {
+		t.Errorf("expected X-Frame-Options to be stripped, got %q", xfo)
+	}
+}
+
+func TestShellPageNoBasePathLeavesDefault(t *testing.T) {
+	target, _ := url.Parse("http://localhost:1")
+	p, err := New(Config{
+		Target:      target,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/__agent-reverse-proxy-debug__/shell")
+	if err != nil {
+		t.Fatalf("GET shell failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if !strings.Contains(string(body), "var _basePath = '';") {
+		t.Error("shell page without BasePath should have empty _basePath")
 	}
 }
 
