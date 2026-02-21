@@ -250,9 +250,12 @@ const debugInjectJS = `(function() {
   var _scriptSrc = document.currentScript && document.currentScript.src || '';
   var _basePath = '';
   var _marker = '/__agent-reverse-proxy-debug__/inject.js';
-  var _idx = _scriptSrc.indexOf(_marker);
-  if (_idx !== -1) {
-    try { _basePath = new URL(_scriptSrc).pathname.slice(0, _idx); } catch(e) {}
+  if (_scriptSrc) {
+    try {
+      var _pathname = new URL(_scriptSrc).pathname;
+      var _idx = _pathname.indexOf(_marker);
+      if (_idx !== -1) _basePath = _pathname.slice(0, _idx);
+    } catch(e) {}
   }
 
   var ws = null;
