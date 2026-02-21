@@ -1,6 +1,6 @@
 {
   "name": "@choonkeat/agent-reverse-proxy",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "MCP server with reverse proxy and debug instrumentation for app preview",
   "type": "module",
   "bin": {
@@ -16,11 +16,11 @@
   },
   "license": "MIT",
   "optionalDependencies": {
-    "@choonkeat/agent-reverse-proxy-linux-x64": "0.2.4",
-    "@choonkeat/agent-reverse-proxy-linux-arm64": "0.2.4",
-    "@choonkeat/agent-reverse-proxy-darwin-x64": "0.2.4",
-    "@choonkeat/agent-reverse-proxy-darwin-arm64": "0.2.4",
-    "@choonkeat/agent-reverse-proxy-win32-x64": "0.2.4",
-    "@choonkeat/agent-reverse-proxy-win32-arm64": "0.2.4"
+    "@choonkeat/agent-reverse-proxy-linux-x64": "0.2.5",
+    "@choonkeat/agent-reverse-proxy-linux-arm64": "0.2.5",
+    "@choonkeat/agent-reverse-proxy-darwin-x64": "0.2.5",
+    "@choonkeat/agent-reverse-proxy-darwin-arm64": "0.2.5",
+    "@choonkeat/agent-reverse-proxy-win32-x64": "0.2.5",
+    "@choonkeat/agent-reverse-proxy-win32-arm64": "0.2.5"
   }
 }

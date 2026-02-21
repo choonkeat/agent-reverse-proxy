@@ -1,6 +1,6 @@
 {
   "name": "@choonkeat/agent-reverse-proxy-darwin-arm64",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "description": "agent-reverse-proxy binary for darwin/arm64",
   "license": "MIT",
   "os": ["darwin"],
