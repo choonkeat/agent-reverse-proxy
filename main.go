@@ -13,7 +13,7 @@ import (
 )
 
 // ProxyVersion is the version of the agent-reverse-proxy.
-const ProxyVersion = "0.2.0"
+const ProxyVersion = "0.2.1"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -194,7 +194,7 @@ func (p *Proxy) scriptTag() string {
 func (p *Proxy) handleDynamicProxy(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	if path == "" {
-		http.Error(w, "missing target in path", http.StatusBadRequest)
+		p.serveDynamicLandingPage(w, r)
 		return
 	}
 
@@ -212,6 +212,61 @@ func (p *Proxy) handleDynamicProxy(w http.ResponseWriter, r *http.Request) {
 	appAddr := target.Host
 	handleProxyRequest(target, appAddr, p.config.NoInject, p.config.ThemeCookie, p.scriptTag(), pathPrefix)(w, r)
 }
+
+// serveDynamicLandingPage renders a landing page for dynamic proxy mode at "/".
+func (p *Proxy) serveDynamicLandingPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, dynamicLandingHTML)
+}
+
+const dynamicLandingHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Reverse Proxy</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f5f5f5; }
+  .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1); padding: 2rem; max-width: 480px; width: 100%; }
+  h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+  form { display: flex; gap: .5rem; }
+  input { flex: 1; padding: .5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+  button { padding: .5rem 1rem; background: #0057ff; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+  button:hover { background: #004ad9; }
+  .err { color: #c00; margin-top: .5rem; font-size: .875rem; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Agent Reverse Proxy</h1>
+  <form id="f">
+    <input id="u" type="text" value="http://localhost:3000/" placeholder="http://host:port/path" autofocus>
+    <button type="submit">Go</button>
+  </form>
+  <div class="err" id="e"></div>
+</div>
+<script>
+document.getElementById("f").addEventListener("submit", function(ev) {
+  ev.preventDefault();
+  var raw = document.getElementById("u").value.trim();
+  var errEl = document.getElementById("e");
+  errEl.textContent = "";
+  try {
+    var u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("scheme must be http or https");
+    var scheme = u.protocol.replace(":", "");
+    var host = u.host;
+    var path = u.pathname + u.search + u.hash;
+    window.location.href = "/" + scheme + "/" + host + path;
+  } catch (err) {
+    errEl.textContent = "Invalid URL: " + err.message;
+  }
+});
+</script>
+</body>
+</html>
+`
 
 // extractTarget parses a path like "http/localhost:8080/hello/world" into
 // a target URL (http://localhost:8080) and remainder path (/hello/world).

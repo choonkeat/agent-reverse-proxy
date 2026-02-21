@@ -48,9 +48,12 @@ example-run:
 		for i in $$(seq 1 30); do curl -sf http://localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
 		cd cmd/example && TARGET_URL=$(TARGET_URL) node test.mjs'
 
-DYNAMIC_PROXY_PORT ?= $(or $(PORT),3004)
+DYNAMIC_PROXY_PORT ?= $(PROXY_PORT)
 
 example-dynamic-run:
+ifeq ($(DYNAMIC_PROXY_PORT),)
+	$(error PROXY_PORT is required (e.g. PROXY_PORT=23004 make example-dynamic-run))
+endif
 	go build -o dist/example-server ./cmd/example
 	go build -o dist/agent-reverse-proxy ./cmd/agent-reverse-proxy
 	cd cmd/example && npm install --silent
