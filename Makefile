@@ -25,6 +25,9 @@ bump:
 	@sed -i 's/"version": "[^"]*"/"version": "$(VERSION)"/' package.json
 	@sed -i 's/"@choonkeat\/agent-reverse-proxy-\([^"]*\)": "[^"]*"/"@choonkeat\/agent-reverse-proxy-\1": "$(VERSION)"/' package.json
 	@sed -i 's/ProxyVersion = "[^"]*"/ProxyVersion = "$(VERSION)"/' main.go
+	@for f in npm-platforms/*/package.json; do \
+		sed -i 's/"version": "[^"]*"/"version": "$(VERSION)"/' "$$f"; \
+	done
 	@echo "Version bumped to $(VERSION)"
 
 EXAMPLE_PORT ?= 9876

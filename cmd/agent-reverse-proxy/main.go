@@ -31,6 +31,12 @@ func main() {
 	bridgeURL := flag.String("bridge", "", "Bridge mode: relay stdio MCP to an HTTP MCP endpoint (skips proxy setup)")
 	flag.Parse()
 
+	*appHostFlag = os.ExpandEnv(*appHostFlag)
+	*bridgeURL = os.ExpandEnv(*bridgeURL)
+	*basePath = os.ExpandEnv(*basePath)
+	*toolPrefix = os.ExpandEnv(*toolPrefix)
+	*themeCookie = os.ExpandEnv(*themeCookie)
+
 	if *bridgeURL != "" {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
