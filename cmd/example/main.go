@@ -44,6 +44,44 @@ func serveHTML(w http.ResponseWriter, name string) {
 	w.Write(mustRead(name))
 }
 
+// responseLogger wraps http.ResponseWriter to capture status code and headers for logging.
+type responseLogger struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rl *responseLogger) WriteHeader(code int) {
+	rl.status = code
+	rl.ResponseWriter.WriteHeader(code)
+}
+
+func (rl *responseLogger) Write(b []byte) (int, error) {
+	if rl.status == 0 {
+		rl.status = 200
+	}
+	return rl.ResponseWriter.Write(b)
+}
+
+func withLogging(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rl := &responseLogger{ResponseWriter: w}
+		h.ServeHTTP(rl, r)
+		if rl.status == 0 {
+			rl.status = 200
+		}
+		loc := rl.Header().Get("Location")
+		cookie := rl.Header().Get("Set-Cookie")
+		extra := ""
+		if loc != "" {
+			extra += fmt.Sprintf(" Location: %s", loc)
+		}
+		if cookie != "" {
+			extra += fmt.Sprintf(" Set-Cookie: %s", cookie)
+		}
+		log.Printf("%s %s -> %d%s", r.Method, r.URL.Path, rl.status, extra)
+	})
+}
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -174,7 +212,7 @@ func main() {
 	mux.HandleFunc("/static/final-bg.png", servePNG)   // relative url() from /static/final.css
 
 	log.Printf("Example server listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	if err := http.ListenAndServe(":"+port, withLogging(mux)); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }
