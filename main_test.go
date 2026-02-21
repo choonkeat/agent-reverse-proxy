@@ -1,4 +1,4 @@
-package main
+package agentproxy
 
 import (
 	"bytes"
@@ -8,13 +8,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+// testScriptTag is the default script tag used in tests (root base path)
+const testScriptTag = `<script src="/__agent-reverse-proxy-debug__/inject.js"></script>`
 
 // --- inject / CSP tests (from debug_inject_test.go) ---
 
@@ -68,7 +70,7 @@ func TestInjectDebugScript(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := injectDebugScript([]byte(tt.input))
+			result := injectDebugScript([]byte(tt.input), testScriptTag)
 			if string(result) != tt.expected {
 				t.Errorf("injectDebugScript(%q)\ngot:  %q\nwant: %q", tt.input, result, tt.expected)
 			}
@@ -179,8 +181,8 @@ func TestGzipDecompression(t *testing.T) {
 		t.Errorf("gzip roundtrip failed\ngot:  %q\nwant: %q", decompressed, original)
 	}
 
-	injected := injectDebugScript(decompressed)
-	if !strings.Contains(string(injected), debugScriptTag) {
+	injected := injectDebugScript(decompressed, testScriptTag)
+	if !strings.Contains(string(injected), testScriptTag) {
 		t.Errorf("injection into decompressed content failed")
 	}
 }
@@ -451,7 +453,7 @@ func TestWebSocketProxyRelay(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -487,7 +489,7 @@ func TestNormalHTTPThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -505,7 +507,7 @@ func TestNormalHTTPThroughProxy(t *testing.T) {
 func TestWebSocketProxyBackendDown(t *testing.T) {
 	backendURL, _ := url.Parse("http://127.0.0.1:1")
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, "1", false, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, "1", false, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -529,7 +531,7 @@ func TestHTMLInjectionThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -540,7 +542,7 @@ func TestHTMLInjectionThroughProxy(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), debugScriptTag) {
+	if !strings.Contains(string(body), testScriptTag) {
 		t.Errorf("expected HTML response to contain debug script tag, got: %s", body)
 	}
 }
@@ -554,7 +556,7 @@ func TestNoInjectionForNonHTML(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -565,7 +567,7 @@ func TestNoInjectionForNonHTML(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if strings.Contains(string(body), debugScriptTag) {
+	if strings.Contains(string(body), testScriptTag) {
 		t.Errorf("non-HTML response should not contain debug script tag")
 	}
 }
@@ -579,7 +581,7 @@ func TestNoInjectFlag(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), true /* noInject */, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), true /* noInject */, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -590,7 +592,7 @@ func TestNoInjectFlag(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if strings.Contains(string(body), debugScriptTag) {
+	if strings.Contains(string(body), testScriptTag) {
 		t.Errorf("with --no-inject, HTML should not contain debug script tag")
 	}
 }
@@ -609,7 +611,7 @@ func TestGzipHTMLInjectionThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -620,72 +622,12 @@ func TestGzipHTMLInjectionThroughProxy(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), debugScriptTag) {
+	if !strings.Contains(string(body), testScriptTag) {
 		t.Errorf("gzip HTML should be decompressed and injected, got: %s", body)
 	}
 	if resp.Header.Get("Content-Encoding") != "" {
 		t.Errorf("Content-Encoding should be removed after decompression, got: %s", resp.Header.Get("Content-Encoding"))
 	}
-}
-
-// --- Port selection tests ---
-
-func TestResolveAppPort(t *testing.T) {
-	// Clear env
-	os.Unsetenv("APP_PORT")
-	os.Unsetenv("PORT")
-
-	// Default
-	if p := resolveAppPort(0); p != 3000 {
-		t.Errorf("default app port should be 3000, got %d", p)
-	}
-
-	// Flag overrides
-	if p := resolveAppPort(8080); p != 8080 {
-		t.Errorf("flag app port should be 8080, got %d", p)
-	}
-
-	// APP_PORT env
-	os.Setenv("APP_PORT", "4000")
-	if p := resolveAppPort(0); p != 4000 {
-		t.Errorf("APP_PORT env should give 4000, got %d", p)
-	}
-	os.Unsetenv("APP_PORT")
-
-	// PORT env
-	os.Setenv("PORT", "5000")
-	if p := resolveAppPort(0); p != 5000 {
-		t.Errorf("PORT env should give 5000, got %d", p)
-	}
-	os.Unsetenv("PORT")
-
-	// Flag takes precedence over env
-	os.Setenv("APP_PORT", "4000")
-	if p := resolveAppPort(9999); p != 9999 {
-		t.Errorf("flag should take precedence, got %d", p)
-	}
-	os.Unsetenv("APP_PORT")
-}
-
-func TestResolveProxyPort(t *testing.T) {
-	os.Unsetenv("PROXY_PORT")
-
-	// Default: 20000 + appPort
-	if p := resolveProxyPort(0, 3000); p != 23000 {
-		t.Errorf("default proxy port should be 23000, got %d", p)
-	}
-
-	// Flag overrides
-	if p := resolveProxyPort(28080, 3000); p != 28080 {
-		t.Errorf("flag proxy port should be 28080, got %d", p)
-	}
-
-	// PROXY_PORT env
-	os.Setenv("PROXY_PORT", "25000")
-	if p := resolveProxyPort(0, 3000); p != 25000 {
-		t.Errorf("PROXY_PORT env should give 25000, got %d", p)
-	}
-	os.Unsetenv("PROXY_PORT")
 }
 
 func TestDebugEndpointPaths(t *testing.T) {
@@ -708,7 +650,7 @@ func TestLocationHeaderRewriting(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -744,7 +686,7 @@ func TestLocationHeaderRelativeUnchanged(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -786,7 +728,7 @@ func TestLocationHeaderWithCookies(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme"))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -840,5 +782,339 @@ func TestLocationHeaderWithCookies(t *testing.T) {
 	body, _ := io.ReadAll(resp2.Body)
 	if string(body) != "OK" {
 		t.Errorf("expected OK, got %s", body)
+	}
+}
+
+// --- Library API tests ---
+
+func TestNewProxy(t *testing.T) {
+	target, _ := url.Parse("http://localhost:3000")
+	p, err := New(Config{
+		BasePath:    "/",
+		Target:      target,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	if p.Hub() == nil {
+		t.Error("Hub() should not be nil")
+	}
+}
+
+func TestNewProxyInvalidPrefix(t *testing.T) {
+	target, _ := url.Parse("http://localhost:3000")
+	_, err := New(Config{
+		Target:     target,
+		ToolPrefix: "invalid-prefix",
+	})
+	if err == nil {
+		t.Error("expected error for invalid tool prefix")
+	}
+}
+
+func TestProxyServeHTTPCORS(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	p, err := New(Config{
+		Target:      backendURL,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "http://example.com")
+	rr := httptest.NewRecorder()
+	p.ServeHTTP(rr, req)
+
+	if got := rr.Header().Get("X-Agent-Reverse-Proxy"); got != ProxyVersion {
+		t.Errorf("X-Agent-Reverse-Proxy = %q, want %q", got, ProxyVersion)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://example.com" {
+		t.Errorf("CORS origin = %q, want http://example.com", got)
+	}
+}
+
+func TestProxyBasePath(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("path:" + r.URL.Path))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	p, err := New(Config{
+		BasePath:    "/myproxy",
+		Target:      backendURL,
+		NoInject:    true,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	// Request under base path should work
+	resp, err := http.Get(server.URL + "/myproxy/hello")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "path:/hello" {
+		t.Errorf("expected path:/hello, got %s", body)
+	}
+
+	// Request outside base path should 404
+	resp2, err := http.Get(server.URL + "/other")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for path outside base, got %d", resp2.StatusCode)
+	}
+}
+
+func TestProxyBasePathScriptTag(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Test</title></head><body>Hello</body></html>`))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	p, err := New(Config{
+		BasePath:    "/myproxy",
+		Target:      backendURL,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/myproxy/")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	expectedTag := `<script src="/myproxy/__agent-reverse-proxy-debug__/inject.js"></script>`
+	if !strings.Contains(string(body), expectedTag) {
+		t.Errorf("expected HTML to contain base-path-aware script tag %q, got: %s", expectedTag, body)
+	}
+}
+
+func TestProxyBasePathDebugEndpoints(t *testing.T) {
+	target, _ := url.Parse("http://localhost:1")
+	p, err := New(Config{
+		BasePath:    "/myproxy",
+		Target:      target,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	// inject.js should be served under base path
+	resp, err := http.Get(server.URL + "/myproxy/__agent-reverse-proxy-debug__/inject.js")
+	if err != nil {
+		t.Fatalf("GET inject.js failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("inject.js: expected 200, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/javascript" {
+		t.Errorf("inject.js: expected Content-Type application/javascript, got %q", ct)
+	}
+}
+
+// --- Dynamic target mode tests ---
+
+func TestExtractTarget(t *testing.T) {
+	tests := []struct {
+		path      string
+		wantURL   string
+		wantPath  string
+		wantError bool
+	}{
+		{
+			path:     "http/localhost:8080/hello/world",
+			wantURL:  "http://localhost:8080",
+			wantPath: "/hello/world",
+		},
+		{
+			path:     "https/example.com:443/api/v1",
+			wantURL:  "https://example.com:443",
+			wantPath: "/api/v1",
+		},
+		{
+			path:     "http/localhost:3000",
+			wantURL:  "http://localhost:3000",
+			wantPath: "/",
+		},
+		{
+			path:      "ftp/localhost:21/file",
+			wantError: true,
+		},
+		{
+			path:      "http",
+			wantError: true,
+		},
+		{
+			path:      "http/",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			target, remainder, err := extractTarget(tt.path)
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("expected error, got target=%v remainder=%q", target, remainder)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if target.String() != tt.wantURL {
+				t.Errorf("target URL = %q, want %q", target.String(), tt.wantURL)
+			}
+			if remainder != tt.wantPath {
+				t.Errorf("remainder = %q, want %q", remainder, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestDynamicTargetProxy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("dynamic:" + r.URL.Path))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	host := backendURL.Host
+
+	p, err := New(Config{
+		Target:      nil, // dynamic mode
+		NoInject:    true,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/http/" + host + "/hello/world")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "dynamic:/hello/world" {
+		t.Errorf("expected dynamic:/hello/world, got %s", body)
+	}
+}
+
+func TestDynamicTargetProxyWithBasePath(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("dynamic:" + r.URL.Path))
+	}))
+	defer backend.Close()
+
+	backendURL, _ := url.Parse(backend.URL)
+	host := backendURL.Host
+
+	p, err := New(Config{
+		BasePath:    "/proxy123",
+		Target:      nil, // dynamic mode
+		NoInject:    true,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/proxy123/http/" + host + "/hello")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "dynamic:/hello" {
+		t.Errorf("expected dynamic:/hello, got %s", body)
+	}
+}
+
+func TestInjectJSBasePathDetection(t *testing.T) {
+	// The inject.js should contain the basePath auto-detection code
+	if !strings.Contains(debugInjectJS, "_basePath") {
+		t.Error("inject.js should contain _basePath auto-detection")
+	}
+	if !strings.Contains(debugInjectJS, "document.currentScript") {
+		t.Error("inject.js should use document.currentScript for base path detection")
+	}
+	if !strings.Contains(debugInjectJS, "_basePath + '/__agent-reverse-proxy-debug__/ws'") {
+		t.Error("inject.js should use _basePath in WS URL construction")
+	}
+}
+
+func TestShellPageBasePathRewrite(t *testing.T) {
+	target, _ := url.Parse("http://localhost:1")
+	p, err := New(Config{
+		BasePath:    "/myproxy",
+		Target:      target,
+		ToolPrefix:  "proxied",
+		ThemeCookie: "test-theme",
+	})
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	server := httptest.NewServer(p)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/myproxy/__agent-reverse-proxy-debug__/shell")
+	if err != nil {
+		t.Fatalf("GET shell failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if !strings.Contains(string(body), "/myproxy/__agent-reverse-proxy-debug__/ws") {
+		t.Error("shell page should contain base-path-aware WS URL")
 	}
 }

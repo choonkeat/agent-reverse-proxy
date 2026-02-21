@@ -34,7 +34,7 @@ for target in "${TARGETS[@]}"; do
   echo "→ Compiling ${goos}/${goarch}…"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
     go build -C "$REPO_ROOT" -trimpath -ldflags="-s -w" \
-    -o "$bin_dir/$bin_name" .
+    -o "$bin_dir/$bin_name" ./cmd/agent-reverse-proxy
 
   # Map goarch to npm cpu field
   case "$goarch" in

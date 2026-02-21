@@ -1,9 +1,6 @@
-package main
+package agentproxy
 
 import "regexp"
-
-// debugScriptTag is injected into HTML responses to enable debug channel
-const debugScriptTag = `<script src="/__agent-reverse-proxy-debug__/inject.js"></script>`
 
 // debugInjectScriptRe matches <head> or <body> tag (case insensitive)
 var debugInjectScriptRe = regexp.MustCompile(`(?i)(<head[^>]*>|<body[^>]*>)`)
@@ -242,8 +239,17 @@ const debugInjectJS = `(function() {
   if (window.__arpDebugDebugInit) return;
   window.__arpDebugDebugInit = true;
 
+  // Auto-detect base path from this script's src URL
+  var _scriptSrc = document.currentScript && document.currentScript.src || '';
+  var _basePath = '';
+  var _marker = '/__agent-reverse-proxy-debug__/inject.js';
+  var _idx = _scriptSrc.indexOf(_marker);
+  if (_idx !== -1) {
+    try { _basePath = new URL(_scriptSrc).pathname.slice(0, _idx); } catch(e) {}
+  }
+
   var ws = null;
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__agent-reverse-proxy-debug__/ws';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + _basePath + '/__agent-reverse-proxy-debug__/ws';
   var messageQueue = [];
   var reconnectAttempts = 0;
   var maxReconnectAttempts = 5;

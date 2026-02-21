@@ -1,7 +1,7 @@
 .PHONY: build test build-platforms publish-dry publish bump example-serve example-test example-run
 
 build:
-	go build -o dist/agent-reverse-proxy .
+	go build -o dist/agent-reverse-proxy ./cmd/agent-reverse-proxy
 
 test:
 	go vet ./...

@@ -1,24 +1,19 @@
-package main
+package agentproxy
 
 import (
-	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const proxyVersion = "0.1.4"
+// ProxyVersion is the version of the agent-reverse-proxy.
+const ProxyVersion = "0.1.4"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -26,130 +21,70 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func main() {
-	appHostFlag := flag.String("app-host", "", "Hostname of the user's app (default: $APP_HOST or localhost)")
-	appPortFlag := flag.Int("app-port", 0, "Port of the user's app (default: $APP_PORT or $PORT or 3000)")
-	proxyPortFlag := flag.Int("proxy-port", 0, "Port for the proxy HTTP server (default: $PROXY_PORT or 20000+app-port)")
-	noInject := flag.Bool("no-inject", false, "Disable debug script injection (plain reverse proxy)")
-	noStdio := flag.Bool("no-stdio", false, "Disable stdio MCP transport (HTTP MCP only)")
-	toolPrefix := flag.String("tool-prefix", "proxied", "Prefix for MCP tool names (e.g. 'preview' gives preview_browser_snapshot)")
-	themeCookie := flag.String("theme-cookie", "agent-reverse-proxy-theme", "Cookie name for light/dark theme on the error page")
-	flag.Parse()
+// Config configures a reverse proxy instance.
+type Config struct {
+	// BasePath is the URL path prefix where this proxy is mounted.
+	// Default: "/" (root, current behavior).
+	BasePath string
 
-	appHost := resolveAppHost(*appHostFlag)
-	appPort := resolveAppPort(*appPortFlag)
-	proxyPort := resolveProxyPort(*proxyPortFlag, appPort)
+	// Target is the fixed backend URL. When set, all requests proxy to this target.
+	// When nil, dynamic mode: target URL is extracted from the request path.
+	Target *url.URL
 
-	prefix, err := NewToolPrefix(*toolPrefix)
+	// NoInject disables debug script injection (plain reverse proxy).
+	NoInject bool
+
+	// ToolPrefix for MCP tool names (e.g. "preview" → "preview_browser_snapshot").
+	ToolPrefix string
+
+	// ThemeCookie is the cookie name for light/dark theme on the error page.
+	ThemeCookie string
+}
+
+// Proxy is an HTTP handler that reverse-proxies requests with optional
+// debug script injection and MCP tool support.
+type Proxy struct {
+	config     Config
+	basePath   string // normalized (no trailing slash, or "" for root)
+	hub        *DebugHub
+	mux        *http.ServeMux
+	toolPrefix ToolPrefix
+}
+
+// New creates a new Proxy. Returns error if config is invalid.
+func New(cfg Config) (*Proxy, error) {
+	prefix, err := NewToolPrefix(cfg.ToolPrefix)
 	if err != nil {
-		log.Fatalf("--tool-prefix: %v", err)
+		return nil, fmt.Errorf("tool-prefix: %w", err)
+	}
+
+	// Normalize base path: strip trailing slash, "" for root
+	bp := strings.TrimRight(cfg.BasePath, "/")
+	if bp == "" || bp == "/" {
+		bp = ""
 	}
 
 	hub := NewDebugHub()
 
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "agent-reverse-proxy",
-		Version: proxyVersion,
-	}, nil)
-	registerTools(server, hub, prefix)
-	registerResources(server, prefix)
-
-	targetURL, err := url.Parse(fmt.Sprintf("http://%s:%d", appHost, appPort))
-	if err != nil {
-		log.Fatalf("invalid target URL: %v", err)
+	p := &Proxy{
+		config:     cfg,
+		basePath:   bp,
+		hub:        hub,
+		mux:        http.NewServeMux(),
+		toolPrefix: prefix,
 	}
 
-	appAddr := fmt.Sprintf("%s:%d", appHost, appPort)
-	baseURL, ln, err := startHTTPServer(server, hub, targetURL, appAddr, proxyPort, *noInject, *themeCookie)
-	if err != nil {
-		log.Fatalf("failed to start HTTP server: %v", err)
-	}
-	_ = ln
-
-	fmt.Fprintf(os.Stderr, "Reverse proxy: %s -> %s:%d\n", baseURL, appHost, appPort)
-	fmt.Fprintf(os.Stderr, "MCP endpoint: POST %s/mcp\n", baseURL)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if !*noStdio {
-		if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
-			log.Fatalf("mcp server error: %v", err)
-		}
-	} else {
-		fmt.Fprintf(os.Stderr, "Running in HTTP-only mode (no stdio MCP). Press Ctrl+C to stop.\n")
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		<-sig
-	}
-}
-
-// resolveAppHost determines the app host from flag, env var, or default.
-func resolveAppHost(flagVal string) string {
-	if flagVal != "" {
-		return flagVal
-	}
-	if s := os.Getenv("APP_HOST"); s != "" {
-		return s
-	}
-	return "localhost"
-}
-
-// resolveAppPort determines the app port from flag, env vars, or default.
-func resolveAppPort(flagVal int) int {
-	if flagVal > 0 {
-		return flagVal
-	}
-	if s := os.Getenv("APP_PORT"); s != "" {
-		if p, err := strconv.Atoi(s); err == nil && p > 0 {
-			return p
-		}
-	}
-	if s := os.Getenv("PORT"); s != "" {
-		if p, err := strconv.Atoi(s); err == nil && p > 0 {
-			return p
-		}
-	}
-	return 3000
-}
-
-// resolveProxyPort determines the proxy port from flag, env vars, or default.
-func resolveProxyPort(flagVal, appPort int) int {
-	if flagVal > 0 {
-		return flagVal
-	}
-	if s := os.Getenv("PROXY_PORT"); s != "" {
-		if p, err := strconv.Atoi(s); err == nil && p > 0 {
-			return p
-		}
-	}
-	return 20000 + appPort
-}
-
-// startHTTPServer starts the HTTP server with proxy, debug endpoints, and MCP.
-func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, appAddr string, proxyPort int, noInject bool, themeCookie string) (string, net.Listener, error) {
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		return mcpServer
-	}, &mcp.StreamableHTTPOptions{
-		Stateless: true,
-	})
-
-	mux := http.NewServeMux()
-
-	// MCP over HTTP
-	mux.Handle("/mcp", mcpHandler)
-
-	// Debug endpoints
-	mux.HandleFunc("/__agent-reverse-proxy-debug__/inject.js", func(w http.ResponseWriter, r *http.Request) {
+	// Register debug endpoints on internal mux
+	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/inject.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write([]byte(debugInjectJS))
 	})
 
-	mux.HandleFunc("/__agent-reverse-proxy-debug__/ws", handleDebugIframeWS(hub))
-	mux.HandleFunc("/__agent-reverse-proxy-debug__/agent", handleDebugAgentWS(hub))
-	mux.HandleFunc("/__agent-reverse-proxy-debug__/ui", handleDebugUIObserverWS(hub))
+	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/ws", handleDebugIframeWS(hub))
+	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/agent", handleDebugAgentWS(hub))
+	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/ui", handleDebugUIObserverWS(hub))
 
-	mux.HandleFunc("/__agent-reverse-proxy-debug__/open", func(w http.ResponseWriter, r *http.Request) {
+	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/open", func(w http.ResponseWriter, r *http.Request) {
 		rawURL := r.URL.Query().Get("url")
 		if rawURL == "" {
 			http.Error(w, "missing url parameter", http.StatusBadRequest)
@@ -161,50 +96,157 @@ func startHTTPServer(mcpServer *mcp.Server, hub *DebugHub, targetURL *url.URL, a
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Shell page
-	mux.HandleFunc("/__agent-reverse-proxy-debug__/shell", func(w http.ResponseWriter, r *http.Request) {
+	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/shell", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, shellPageHTML)
+		html := shellPageHTML
+		if bp != "" {
+			html = strings.ReplaceAll(html,
+				"/__agent-reverse-proxy-debug__/",
+				bp+"/__agent-reverse-proxy-debug__/")
+		}
+		fmt.Fprintf(w, html)
 	})
 
-	// Reverse proxy (catch-all)
-	mux.HandleFunc("/", handleProxyRequest(targetURL, appAddr, noInject, themeCookie))
+	// Reverse proxy catch-all
+	p.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Target != nil {
+			// Fixed target mode
+			appAddr := cfg.Target.Host
+			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag())(w, r)
+		} else {
+			// Dynamic target mode
+			p.handleDynamicProxy(w, r)
+		}
+	})
 
-	addr := fmt.Sprintf("0.0.0.0:%d", proxyPort)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return "", nil, fmt.Errorf("listen error: %w", err)
+	return p, nil
+}
+
+// ServeHTTP implements http.Handler.
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Add X-Agent-Reverse-Proxy and CORS headers
+	w.Header().Set("X-Agent-Reverse-Proxy", ProxyVersion)
+	if origin := r.Header.Get("Origin"); origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Agent-Reverse-Proxy")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 	}
-	actualPort := ln.Addr().(*net.TCPAddr).Port
 
-	// Every response carries X-Agent-Reverse-Proxy so the main UI's
-	// cross-origin probe can tell our responses (even 502) apart from
-	// Traefik's own 502 (proxy container not started yet).
-	// CORS headers are set on ALL methods (not just HEAD/OPTIONS) because
-	// iOS WebKit may convert HEAD to GET after a preflight, and without
-	// CORS on the GET response the header becomes opaque to JS.
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Agent-Reverse-Proxy", proxyVersion)
-		if origin := r.Header.Get("Origin"); origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
-			w.Header().Set("Access-Control-Expose-Headers", "X-Agent-Reverse-Proxy")
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
+	// Strip base path prefix
+	if p.basePath != "" {
+		if !strings.HasPrefix(r.URL.Path, p.basePath+"/") && r.URL.Path != p.basePath {
+			http.NotFound(w, r)
+			return
+		}
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, p.basePath)
+		if r.URL.Path == "" {
+			r.URL.Path = "/"
+		}
+		r.URL.RawPath = ""
+		// Also strip from RequestURI for dynamic mode
+		if strings.HasPrefix(r.RequestURI, p.basePath) {
+			r.RequestURI = strings.TrimPrefix(r.RequestURI, p.basePath)
+			if r.RequestURI == "" {
+				r.RequestURI = "/"
 			}
 		}
-		mux.ServeHTTP(w, r)
+	}
+
+	p.mux.ServeHTTP(w, r)
+}
+
+// Hub returns the DebugHub for external use.
+func (p *Proxy) Hub() *DebugHub {
+	return p.hub
+}
+
+// RegisterTools registers MCP tools on an external MCP server.
+func (p *Proxy) RegisterTools(server *mcp.Server) {
+	registerTools(server, p.hub, p.toolPrefix)
+}
+
+// RegisterResources registers MCP resources on an external MCP server.
+func (p *Proxy) RegisterResources(server *mcp.Server) {
+	registerResources(server, p.toolPrefix)
+}
+
+// MCPHandler returns an HTTP handler for the MCP endpoint.
+func (p *Proxy) MCPHandler(server *mcp.Server) http.Handler {
+	return mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		return server
+	}, &mcp.StreamableHTTPOptions{
+		Stateless: true,
 	})
+}
 
-	go func() {
-		if err := http.Serve(ln, handler); err != nil {
-			log.Printf("HTTP server error: %v", err)
-		}
-	}()
+// scriptTag returns the base-path-aware script tag for injection.
+func (p *Proxy) scriptTag() string {
+	return fmt.Sprintf(`<script src="%s/__agent-reverse-proxy-debug__/inject.js"></script>`, p.basePath)
+}
 
-	return fmt.Sprintf("http://localhost:%d", actualPort), ln, nil
+// handleDynamicProxy extracts target URL from the request path and proxies to it.
+// Path format: /{scheme}/{host:port}/{path...}
+func (p *Proxy) handleDynamicProxy(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/")
+	if path == "" {
+		http.Error(w, "missing target in path", http.StatusBadRequest)
+		return
+	}
+
+	target, remainder, err := extractTarget(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Rewrite request path to the remainder
+	r.URL.Path = remainder
+	r.URL.RawPath = ""
+
+	appAddr := target.Host
+	handleProxyRequest(target, appAddr, p.config.NoInject, p.config.ThemeCookie, p.scriptTag())(w, r)
+}
+
+// extractTarget parses a path like "http/localhost:8080/hello/world" into
+// a target URL (http://localhost:8080) and remainder path (/hello/world).
+func extractTarget(path string) (*url.URL, string, error) {
+	// Split off scheme
+	slashIdx := strings.Index(path, "/")
+	if slashIdx < 0 {
+		return nil, "", fmt.Errorf("invalid target path: missing host after scheme")
+	}
+	scheme := path[:slashIdx]
+	if scheme != "http" && scheme != "https" {
+		return nil, "", fmt.Errorf("invalid scheme %q: must be http or https", scheme)
+	}
+	rest := path[slashIdx+1:]
+
+	// Split host from remaining path
+	var host, remainder string
+	hostEnd := strings.Index(rest, "/")
+	if hostEnd < 0 {
+		host = rest
+		remainder = "/"
+	} else {
+		host = rest[:hostEnd]
+		remainder = rest[hostEnd:]
+	}
+
+	if host == "" {
+		return nil, "", fmt.Errorf("invalid target path: empty host")
+	}
+
+	target, err := url.Parse(scheme + "://" + host)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid target URL: %w", err)
+	}
+
+	return target, remainder, nil
 }
 
 // handleDebugIframeWS handles WebSocket connections from iframe debug scripts

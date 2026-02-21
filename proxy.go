@@ -1,4 +1,4 @@
-package main
+package agentproxy
 
 import (
 	"bytes"
@@ -15,16 +15,16 @@ import (
 	"time"
 )
 
-// injectDebugScript injects the debug script tag after the FIRST <head> or <body> tag only
-func injectDebugScript(body []byte) []byte {
+// injectDebugScript injects the given script tag after the FIRST <head> or <body> tag only
+func injectDebugScript(body []byte, scriptTag string) []byte {
 	loc := debugInjectScriptRe.FindIndex(body)
 	if loc == nil {
 		return body // No match found
 	}
 	// Insert script tag after the first match
-	result := make([]byte, 0, len(body)+len(debugScriptTag))
+	result := make([]byte, 0, len(body)+len(scriptTag))
 	result = append(result, body[:loc[1]]...)
-	result = append(result, debugScriptTag...)
+	result = append(result, scriptTag...)
 	result = append(result, body[loc[1]:]...)
 	return result
 }
@@ -57,7 +57,7 @@ func modifyCSPHeader(h http.Header) {
 
 // handleProxyRequest proxies requests to the user's app at the given target URL.
 // If noInject is true, HTML injection is disabled (plain reverse proxy).
-func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string) http.HandlerFunc {
+func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string, scriptTag string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade detection: relay raw bytes instead of HTTP proxy
 		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
@@ -118,12 +118,12 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 		defer resp.Body.Close()
 
 		// Process response (inject debug script for HTML, handle cookies)
-		processProxyResponse(w, r, resp, target, noInject)
+		processProxyResponse(w, r, resp, target, noInject, scriptTag)
 	}
 }
 
 // processProxyResponse handles the response: injects debug script for HTML, strips Domain from cookies
-func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool) {
+func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string) {
 	// Copy response headers, handling cookies specially
 	for key, values := range resp.Header {
 		if isHopByHopHeader(key) {
@@ -202,7 +202,7 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 	}
 
 	// Inject the debug script
-	injected := injectDebugScript(body)
+	injected := injectDebugScript(body, scriptTag)
 
 	// Modify CSP header if present
 	modifyCSPHeader(w.Header())
