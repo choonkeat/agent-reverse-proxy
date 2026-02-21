@@ -1,4 +1,4 @@
-.PHONY: build test build-platforms publish-dry publish bump example-serve example-test example-run example-dynamic-run
+.PHONY: build test build-platforms publish-dry publish bump example-serve example-test example-run example-dynamic-run example-basepath-run
 
 build:
 	go build -o dist/agent-reverse-proxy ./cmd/agent-reverse-proxy
@@ -66,3 +66,23 @@ endif
 		for i in $$(seq 1 30); do curl -sf http://localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
 		for i in $$(seq 1 30); do curl -sf http://localhost:$(DYNAMIC_PROXY_PORT)/http/localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
 		cd cmd/example && TARGET_URL=http://localhost:$(DYNAMIC_PROXY_PORT)/http/localhost:$(EXAMPLE_PORT) node test.mjs'
+
+BASEPATH_PROXY_PORT ?= $(PROXY_PORT)
+BASEPATH_PREFIX ?= /myprefix
+
+example-basepath-run:
+ifeq ($(BASEPATH_PROXY_PORT),)
+	$(error PROXY_PORT is required (e.g. PROXY_PORT=23004 make example-basepath-run))
+endif
+	go build -o dist/example-server ./cmd/example
+	go build -o dist/agent-reverse-proxy ./cmd/agent-reverse-proxy
+	cd cmd/example && npm install --silent
+	@bash -c '\
+		PORT=$(EXAMPLE_PORT) ./dist/example-server & \
+		APP_PID=$$!; \
+		./dist/agent-reverse-proxy --app-port $(EXAMPLE_PORT) --proxy-port $(BASEPATH_PROXY_PORT) --base-path $(BASEPATH_PREFIX) --no-stdio --no-inject & \
+		PROXY_PID=$$!; \
+		trap "kill $$APP_PID $$PROXY_PID 2>/dev/null; wait $$APP_PID $$PROXY_PID 2>/dev/null" EXIT; \
+		for i in $$(seq 1 30); do curl -sf http://localhost:$(EXAMPLE_PORT)/ >/dev/null && break; sleep 0.2; done; \
+		for i in $$(seq 1 30); do curl -sf http://localhost:$(BASEPATH_PROXY_PORT)$(BASEPATH_PREFIX)/ >/dev/null && break; sleep 0.2; done; \
+		cd cmd/example && TARGET_URL=http://localhost:$(BASEPATH_PROXY_PORT)$(BASEPATH_PREFIX) node test.mjs'

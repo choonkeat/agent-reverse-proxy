@@ -27,6 +27,7 @@ func main() {
 	noStdio := flag.Bool("no-stdio", false, "Disable stdio MCP transport (HTTP MCP only)")
 	toolPrefix := flag.String("tool-prefix", "proxied", "Prefix for MCP tool names (e.g. 'preview' gives preview_browser_snapshot)")
 	themeCookie := flag.String("theme-cookie", "agent-reverse-proxy-theme", "Cookie name for light/dark theme on the error page")
+	basePath := flag.String("base-path", "/", "URL path prefix where the proxy is mounted (e.g. /preview)")
 	bridgeURL := flag.String("bridge", "", "Bridge mode: relay stdio MCP to an HTTP MCP endpoint (skips proxy setup)")
 	flag.Parse()
 
@@ -62,7 +63,7 @@ func main() {
 	}
 
 	proxy, err := agentproxy.New(agentproxy.Config{
-		BasePath:    "/",
+		BasePath:    *basePath,
 		Target:      targetURL,
 		NoInject:    *noInject,
 		ToolPrefix:  *toolPrefix,

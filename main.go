@@ -115,9 +115,9 @@ func New(cfg Config) (*Proxy, error) {
 	// Reverse proxy catch-all
 	p.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Target != nil {
-			// Fixed target mode — no path prefix needed
+			// Fixed target mode — use basePath as prefix for URL rewriting
 			appAddr := cfg.Target.Host
-			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag(), "")(w, r)
+			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag(), bp)(w, r)
 		} else {
 			// Dynamic target mode
 			p.handleDynamicProxy(w, r)
