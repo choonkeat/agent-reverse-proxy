@@ -13,7 +13,7 @@ import (
 )
 
 // ProxyVersion is the version of the agent-reverse-proxy.
-const ProxyVersion = "0.2.3"
+const ProxyVersion = "0.2.4"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
