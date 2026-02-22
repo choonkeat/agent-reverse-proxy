@@ -14,8 +14,10 @@ const previewProxyErrorPage = `<!DOCTYPE html>
     <meta charset="utf-8">
     <title>App Preview</title>
     <script>
-        (function(){var m=document.cookie.match(/(?:^|;\s*)%s=([^;]+)/);
-        if(m)document.documentElement.setAttribute('data-theme',m[1]);})();
+        (function(){var cn='%s';
+        function applyTheme(){var m=document.cookie.match(new RegExp('(?:^|;\\s*)'+cn+'=([^;]+)'));
+        document.documentElement.setAttribute('data-theme',m?m[1]:'dark');}
+        applyTheme();setInterval(applyTheme,2000);})();
     </script>
     <style>
         :root {
