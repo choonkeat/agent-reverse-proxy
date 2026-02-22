@@ -39,6 +39,11 @@ type Config struct {
 
 	// ThemeCookie is the cookie name for light/dark theme on the error page.
 	ThemeCookie string
+
+	// Hub is an optional shared DebugHub. When set, the proxy uses this hub
+	// instead of creating a new one. This allows multiple proxy instances
+	// (e.g. path-based and port-based) to share the same debug communication.
+	Hub *DebugHub
 }
 
 // Proxy is an HTTP handler that reverse-proxies requests with optional
@@ -64,7 +69,10 @@ func New(cfg Config) (*Proxy, error) {
 		bp = ""
 	}
 
-	hub := NewDebugHub()
+	hub := cfg.Hub
+	if hub == nil {
+		hub = NewDebugHub()
+	}
 
 	p := &Proxy{
 		config:     cfg,
@@ -81,7 +89,6 @@ func New(cfg Config) (*Proxy, error) {
 	})
 
 	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/ws", handleDebugIframeWS(hub))
-	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/agent", handleDebugAgentWS(hub))
 	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/ui", handleDebugUIObserverWS(hub))
 
 	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/open", func(w http.ResponseWriter, r *http.Request) {
@@ -98,18 +105,9 @@ func New(cfg Config) (*Proxy, error) {
 
 	p.mux.HandleFunc("/__agent-reverse-proxy-debug__/shell", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		html := shellPageHTML
-		if bp != "" {
-			html = strings.ReplaceAll(html,
-				"/__agent-reverse-proxy-debug__/",
-				bp+"/__agent-reverse-proxy-debug__/")
-			// Inject base path so inner iframe src and navigate commands
-			// resolve relative to the proxy, not the host server root
-			html = strings.Replace(html,
-				"var _basePath = '';",
-				"var _basePath = '"+bp+"';", 1)
-		}
-		fmt.Fprintf(w, html)
+		// _basePath and WS URL are now derived dynamically from location.pathname
+		// in the shell page JS, so no server-side injection is needed.
+		fmt.Fprintf(w, shellPageHTML)
 	})
 
 	// Reverse proxy catch-all
@@ -342,34 +340,7 @@ func handleDebugIframeWS(hub *DebugHub) http.HandlerFunc {
 				log.Printf("[DebugHub] Iframe read error: %v", err)
 				break
 			}
-			hub.ForwardToAgent(msg)
-		}
-	}
-}
-
-// handleDebugAgentWS handles WebSocket connections from the agent (backward compat)
-func handleDebugAgentWS(hub *DebugHub) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Printf("[DebugHub] Agent WS upgrade error: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		hub.SetAgent(conn)
-		defer hub.RemoveAgent(conn)
-
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
-					break
-				}
-				log.Printf("[DebugHub] Agent read error: %v", err)
-				break
-			}
-			hub.ForwardToIframes(msg)
+			hub.BroadcastFromIframe(msg)
 		}
 	}
 }

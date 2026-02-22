@@ -8,8 +8,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// DebugHub manages WebSocket connections between iframe debug scripts, agent,
-// and UI observers. It also provides an in-process channel for MCP tools to
+// DebugHub manages WebSocket connections between iframe debug scripts and
+// UI observers. It also provides an in-process channel for MCP tools to
 // receive iframe messages directly (without a WebSocket self-connection).
 //
 // Iframe clients are split into two pools by role:
@@ -18,7 +18,6 @@ import (
 type DebugHub struct {
 	shellClients  map[*websocket.Conn]bool // Shell page connections
 	injectClients map[*websocket.Conn]bool // inject.js connections
-	agentConn     *websocket.Conn          // Connected agent (only one allowed, for backward compat)
 	uiObservers   map[*websocket.Conn]bool // UI observers (receive iframe messages, read-only)
 	mu            sync.RWMutex
 
@@ -79,27 +78,6 @@ func (h *DebugHub) RemoveIframeClient(conn *websocket.Conn) {
 	h.RemoveShellClient(conn)
 }
 
-// SetAgent registers the agent WebSocket connection (replaces existing if any).
-func (h *DebugHub) SetAgent(conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.agentConn != nil {
-		h.agentConn.Close()
-	}
-	h.agentConn = conn
-	log.Printf("[DebugHub] Agent connected")
-}
-
-// RemoveAgent unregisters the agent WebSocket connection.
-func (h *DebugHub) RemoveAgent(conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.agentConn == conn {
-		h.agentConn = nil
-		log.Printf("[DebugHub] Agent disconnected")
-	}
-}
-
 // AddUIObserver registers a UI observer connection.
 func (h *DebugHub) AddUIObserver(conn *websocket.Conn) {
 	h.mu.Lock()
@@ -116,22 +94,15 @@ func (h *DebugHub) RemoveUIObserver(conn *websocket.Conn) {
 	log.Printf("[DebugHub] UI observer disconnected (total: %d)", len(h.uiObservers))
 }
 
-// ForwardToAgent sends a message from iframe to the connected WS agent,
-// all UI observers, and all in-process subscribers.
-func (h *DebugHub) ForwardToAgent(msg []byte) {
+// BroadcastFromIframe sends a message from iframe to all UI observers
+// and all in-process subscribers.
+func (h *DebugHub) BroadcastFromIframe(msg []byte) {
 	h.mu.RLock()
-	agent := h.agentConn
 	observers := make([]*websocket.Conn, 0, len(h.uiObservers))
 	for conn := range h.uiObservers {
 		observers = append(observers, conn)
 	}
 	h.mu.RUnlock()
-
-	if agent != nil {
-		if err := agent.WriteMessage(websocket.TextMessage, msg); err != nil {
-			log.Printf("[DebugHub] Error forwarding to agent: %v", err)
-		}
-	}
 
 	for _, conn := range observers {
 		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {

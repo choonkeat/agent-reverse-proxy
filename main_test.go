@@ -275,17 +275,14 @@ func TestDebugHubClientManagement(t *testing.T) {
 	if len(hub.injectClients) != 0 {
 		t.Error("hub should start with no inject clients")
 	}
-	if hub.agentConn != nil {
-		t.Error("hub should start with no agent")
-	}
 	hub.mu.RUnlock()
 }
 
 func TestDebugHubForwarding(t *testing.T) {
 	hub := NewDebugHub()
 
-	t.Run("forward to nil agent is safe", func(t *testing.T) {
-		hub.ForwardToAgent([]byte(`{"t":"test"}`))
+	t.Run("broadcast with no observers is safe", func(t *testing.T) {
+		hub.BroadcastFromIframe([]byte(`{"t":"test"}`))
 	})
 
 	t.Run("forward to empty iframes is safe", func(t *testing.T) {
@@ -299,9 +296,9 @@ func TestDebugHubInProcessSubscribe(t *testing.T) {
 	sub := hub.Subscribe()
 	defer hub.Unsubscribe(sub)
 
-	// Simulate iframe message forwarded to agent (which includes in-process subs)
+	// Simulate iframe message broadcast (which includes in-process subs)
 	testMsg := []byte(`{"t":"console","m":"log","args":["hello"]}`)
-	hub.ForwardToAgent(testMsg)
+	hub.BroadcastFromIframe(testMsg)
 
 	select {
 	case msg := <-sub:
@@ -405,7 +402,7 @@ func TestDebugHubInProcessListen(t *testing.T) {
 
 	go func() {
 		for _, msg := range messages {
-			hub.ForwardToAgent([]byte(msg))
+			hub.BroadcastFromIframe([]byte(msg))
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
@@ -1257,11 +1254,12 @@ func TestShellPageBasePathRewrite(t *testing.T) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
-	if !strings.Contains(string(body), "/myproxy/__agent-reverse-proxy-debug__/ws") {
-		t.Error("shell page should contain base-path-aware WS URL")
+	// _basePath is now derived dynamically from location.pathname
+	if !strings.Contains(string(body), `location.pathname.replace(/\/__agent-reverse-proxy-debug__\/shell$/, '')`) {
+		t.Error("shell page should derive _basePath dynamically from location.pathname")
 	}
-	if !strings.Contains(string(body), "var _basePath = '/myproxy';") {
-		t.Error("shell page should contain base-path-aware _basePath variable")
+	if !strings.Contains(string(body), "_basePath + '/__agent-reverse-proxy-debug__/ws") {
+		t.Error("shell page WS URL should use dynamic _basePath prefix")
 	}
 	if !strings.Contains(string(body), "_basePath + initialPath") {
 		t.Error("shell page inner iframe src should use _basePath prefix")
@@ -1321,8 +1319,9 @@ func TestShellPageNoBasePathLeavesDefault(t *testing.T) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
-	if !strings.Contains(string(body), "var _basePath = '';") {
-		t.Error("shell page without BasePath should have empty _basePath")
+	// _basePath is now derived dynamically — same code regardless of BasePath config
+	if !strings.Contains(string(body), `location.pathname.replace(/\/__agent-reverse-proxy-debug__\/shell$/, '')`) {
+		t.Error("shell page should derive _basePath dynamically from location.pathname")
 	}
 }
 

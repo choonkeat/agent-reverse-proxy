@@ -146,7 +146,9 @@ const shellPageHTML = `<!DOCTYPE html>
   var inner = document.getElementById('inner');
   var params = new URLSearchParams(location.search);
   var initialPath = params.get('path') || '/';
-  var _basePath = '';
+  // Derive basePath from the shell page URL so it works for both port-based
+  // (empty basePath) and path-based (/proxy/{uuid}/preview prefix) access.
+  var _basePath = location.pathname.replace(/\/__agent-reverse-proxy-debug__\/shell$/, '');
   inner.src = _basePath + initialPath;
 
   // Shell-level navigation tracking for full-page (non-SPA) navigations
@@ -157,7 +159,7 @@ const shellPageHTML = `<!DOCTYPE html>
   var _shellPendingForward = false;
 
   // Connect to debug WS as iframe client
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__agent-reverse-proxy-debug__/ws?role=shell';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + _basePath + '/__agent-reverse-proxy-debug__/ws?role=shell';
   var ws = null;
   var reconnectAttempts = 0;
 
