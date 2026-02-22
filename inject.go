@@ -526,7 +526,12 @@ const debugInjectJS = `(function() {
       wsWarningBar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;'
         + 'background:#fef3cd;color:#856404;font:bold 12px/1.4 -apple-system,sans-serif;'
         + 'padding:4px 12px;text-align:center;border-bottom:1px solid #ffc107;';
-      wsWarningBar.innerHTML = '';
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '\u00d7';
+      closeBtn.style.cssText = 'position:absolute;top:2px;right:6px;background:none;border:none;'
+        + 'color:#856404;font:bold 16px/1 sans-serif;cursor:pointer;padding:2px 4px;';
+      closeBtn.onclick = function() { wsWarningBar.remove(); wsWarningBar = null; };
+      wsWarningBar.appendChild(closeBtn);
       (document.body || document.documentElement).appendChild(wsWarningBar);
     }
     var line = document.createElement('div');

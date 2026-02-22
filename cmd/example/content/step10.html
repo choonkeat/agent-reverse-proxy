@@ -7,7 +7,7 @@
 (function() {
   var pathParts = location.pathname.split('/step/');
   var basePath = pathParts.length > 1 ? pathParts[0] : '';
-  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + basePath + '/ws/echo';
+  var wsUrl = 'ws://' + location.host + basePath + '/ws/echo';
   var testMsg = 'proxy-ws-test-' + Date.now();
   var ws = new WebSocket(wsUrl);
   var statusEl = document.getElementById('ws-status');
