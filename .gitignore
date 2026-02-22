@@ -1,1 +1,22 @@
 dist/
+
+# Compiled binaries (ad-hoc builds outside dist/)
+agent-reverse-proxy
+example
+testws
+
+# Test artifacts
+cmd/example/failure-screenshot.png
+static/
+
+# npm
+node_modules/
+cmd/example/package-lock.json
+
+# Cross-compiled platform binaries
+npm-platforms/*/bin/
+
+# Tooling
+.playwright-mcp/
+.swe-swe/
+swe-swe/
