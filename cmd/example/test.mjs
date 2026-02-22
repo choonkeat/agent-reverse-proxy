@@ -114,8 +114,32 @@ async function run() {
     await page.waitForSelector('#next');
     await page.click('#next');
 
-    // Step 8: Final Verification
-    console.log('Step 8: Final Verification');
+    // Step 8: Absolute Img & Link
+    console.log('Step 8: Absolute Img & Link');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('status');
+      return el && el.textContent === 'ABS_IMG_LINK_OK';
+    }, { timeout: 10000 });
+    await page.click('#next');
+
+    // Step 9: External CSS url() Rewriting
+    console.log('Step 9: External CSS url() Rewriting');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('status');
+      return el && el.textContent === 'CSS_URL_REWRITE_OK';
+    }, { timeout: 10000 });
+    await page.click('#next');
+
+    // Step 10: WebSocket Echo
+    console.log('Step 10: WebSocket Echo');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('ws-status');
+      return el && el.textContent === 'WS_ECHO_OK';
+    }, { timeout: 10000 });
+    await page.click('#next');
+
+    // Step 11: Final Verification
+    console.log('Step 11: Final Verification');
     await page.waitForFunction(() => {
       const el = document.getElementById('result');
       return el && el.textContent !== 'PENDING';
@@ -125,7 +149,7 @@ async function run() {
     if (result !== 'ALL STEPS PASSED') {
       const cookieSt = await page.textContent('#cookie-status');
       const jsSt = await page.textContent('#js-check');
-      throw new Error(`Step 8 failed: result="${result}" cookie-status="${cookieSt}" js-check="${jsSt}"`);
+      throw new Error(`Step 11 failed: result="${result}" cookie-status="${cookieSt}" js-check="${jsSt}"`);
     }
 
     console.log('ALL STEPS PASSED');

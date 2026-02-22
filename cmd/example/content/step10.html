@@ -1,0 +1,37 @@
+<!DOCTYPE html><html><head></head><body>
+<h1>Step 10: WebSocket Echo</h1>
+<p>This step verifies that WebSocket connections are relayed through the proxy.</p>
+<p id="ws-status">CONNECTING</p>
+<a id="next" href="/step/11" style="display:none">Next</a>
+<script>
+(function() {
+  var pathParts = location.pathname.split('/step/');
+  var basePath = pathParts.length > 1 ? pathParts[0] : '';
+  var wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + basePath + '/ws/echo';
+  var testMsg = 'proxy-ws-test-' + Date.now();
+  var ws = new WebSocket(wsUrl);
+  var statusEl = document.getElementById('ws-status');
+  ws.onopen = function() {
+    statusEl.textContent = 'OPEN';
+    ws.send(testMsg);
+  };
+  ws.onmessage = function(e) {
+    if (e.data === testMsg) {
+      statusEl.textContent = 'WS_ECHO_OK';
+      document.getElementById('next').style.display = '';
+    } else {
+      statusEl.textContent = 'FAILED: unexpected echo "' + e.data + '"';
+    }
+    ws.close();
+  };
+  ws.onerror = function() {
+    statusEl.textContent = 'FAILED: WebSocket error';
+  };
+  ws.onclose = function() {
+    if (statusEl.textContent === 'OPEN' || statusEl.textContent === 'CONNECTING') {
+      statusEl.textContent = 'FAILED: WebSocket closed before echo';
+    }
+  };
+})();
+</script>
+</body></html>

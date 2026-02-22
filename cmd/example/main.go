@@ -1,11 +1,12 @@
 // Command example is an HTTP server that exercises reverse proxy edge cases.
-// It serves an 8-step linear flow where each page tests a specific proxy feature.
+// It serves an 11-step linear flow where each page tests a specific proxy feature.
 //
 // HTML, CSS, and JS content lives in the content/ directory and is embedded at
 // compile time so the binary remains self-contained.
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"embed"
 	"fmt"
@@ -13,15 +14,22 @@ import (
 	"image/color"
 	"image/png"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
 //go:embed content
 var content embed.FS
 
 var greenPNG []byte
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
 
 func init() {
 	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
@@ -60,6 +68,10 @@ func (rl *responseLogger) Write(b []byte) (int, error) {
 		rl.status = 200
 	}
 	return rl.ResponseWriter.Write(b)
+}
+
+func (rl *responseLogger) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return rl.ResponseWriter.(http.Hijacker).Hijack()
 }
 
 func withLogging(h http.Handler) http.Handler {
@@ -177,8 +189,54 @@ func main() {
 		w.WriteHeader(http.StatusFound)
 	})
 
-	// Step 8: final verification — check both cookies + static assets
+	// Step 8: absolute img src + link href
 	mux.HandleFunc("/step/8", func(w http.ResponseWriter, r *http.Request) {
+		serveHTML(w, "step8.html")
+	})
+
+	// CSS for step 8 (served at /styles/step8.css)
+	mux.HandleFunc("/styles/step8.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css")
+		w.Write(mustRead("step8.css"))
+	})
+
+	// Step 9: external CSS url() rewriting
+	mux.HandleFunc("/step/9", func(w http.ResponseWriter, r *http.Request) {
+		serveHTML(w, "step9.html")
+	})
+
+	// CSS for step 9 (served at /styles/step9.css — contains absolute url() that proxy must rewrite)
+	mux.HandleFunc("/styles/step9.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css")
+		w.Write(mustRead("step9.css"))
+	})
+
+	// Step 10: WebSocket echo
+	mux.HandleFunc("/step/10", func(w http.ResponseWriter, r *http.Request) {
+		serveHTML(w, "step10.html")
+	})
+
+	// WebSocket echo handler
+	mux.HandleFunc("/ws/echo", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("ws upgrade error: %v", err)
+			return
+		}
+		defer conn.Close()
+		for {
+			mt, msg, err := conn.ReadMessage()
+			if err != nil {
+				break
+			}
+			if err := conn.WriteMessage(mt, msg); err != nil {
+				break
+			}
+		}
+	})
+
+	// Step 11: final verification — check both cookies + static assets
+	mux.HandleFunc("/step/11", func(w http.ResponseWriter, r *http.Request) {
 		c1, err1 := r.Cookie("proxytest")
 		c2, err2 := r.Cookie("proxytest2")
 		cookieStatus := "COOKIES_MISSING"
@@ -186,30 +244,32 @@ func main() {
 			cookieStatus = "ALL_COOKIES_OK"
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		html := strings.ReplaceAll(string(mustRead("step8.html")), "{{COOKIE_STATUS}}", cookieStatus)
+		html := strings.ReplaceAll(string(mustRead("step11.html")), "{{COOKIE_STATUS}}", cookieStatus)
 		fmt.Fprint(w, html)
 	})
 
-	// Static CSS for step 8 (url(final-bg.png) resolves to /static/final-bg.png)
+	// Static CSS for final step (url(final-bg.png) resolves to /static/final-bg.png)
 	mux.HandleFunc("/static/final.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css")
 		w.Write(mustRead("final.css"))
 	})
 
-	// Static JS for step 8 — checks cookies + asset loading before declaring success
+	// Static JS for final step — checks cookies + asset loading before declaring success
 	mux.HandleFunc("/static/final.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write(mustRead("final.js"))
 	})
 
-	// 1x1 green PNG for CSS url() tests
+	// 1x1 green PNG for CSS url() tests and img src tests
 	servePNG := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Write(greenPNG)
 	}
-	mux.HandleFunc("/styles/bg-check.png", servePNG)  // relative url() from /styles/home.css
-	mux.HandleFunc("/static/check.png", servePNG)      // absolute url() from /styles/home.css
-	mux.HandleFunc("/static/final-bg.png", servePNG)   // relative url() from /static/final.css
+	mux.HandleFunc("/styles/bg-check.png", servePNG)    // relative url() from /styles/home.css
+	mux.HandleFunc("/static/check.png", servePNG)        // absolute url() from /styles/home.css
+	mux.HandleFunc("/static/final-bg.png", servePNG)     // relative url() from /static/final.css
+	mux.HandleFunc("/static/img-check.png", servePNG)    // absolute img src from step 8
+	mux.HandleFunc("/static/step9-bg.png", servePNG)     // absolute url() from /styles/step9.css
 
 	log.Printf("Example server listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, withLogging(mux)); err != nil {

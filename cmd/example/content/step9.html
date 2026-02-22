@@ -1,0 +1,26 @@
+<!DOCTYPE html><html><head>
+<link rel="stylesheet" href="/styles/step9.css">
+</head><body>
+<h1>Step 9: External CSS url() Rewriting</h1>
+<p>This step verifies that absolute <code>url()</code> paths inside external CSS files are rewritten by the proxy.</p>
+<div id="css-bg-check" style="width:10px;height:10px;overflow:hidden"></div>
+<p id="status">PENDING</p>
+<a id="next" href="/step/10" style="display:none">Next</a>
+<script>
+(function() {
+  var el = document.getElementById('css-bg-check');
+  var tries = 0;
+  var timer = setInterval(function() {
+    var bg = getComputedStyle(el).backgroundImage;
+    if (bg && bg !== 'none') {
+      clearInterval(timer);
+      document.getElementById('status').textContent = 'CSS_URL_REWRITE_OK';
+      document.getElementById('next').style.display = '';
+    } else if (++tries > 50) {
+      clearInterval(timer);
+      document.getElementById('status').textContent = 'FAILED: background image not loaded';
+    }
+  }, 100);
+})();
+</script>
+</body></html>

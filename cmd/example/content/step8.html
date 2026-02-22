@@ -1,10 +1,29 @@
 <!DOCTYPE html><html><head>
-<link rel="stylesheet" href="/static/final.css">
+<link rel="stylesheet" href="/styles/step8.css">
 </head><body>
-<h1>Step 8: Final Verification</h1>
-<p id="cookie-status">{{COOKIE_STATUS}}</p>
-<p id="js-check">Waiting for JS...</p>
-<div id="css-bg-check" style="height:1px;overflow:hidden"></div>
-<p id="result">PENDING</p>
-<script src="/static/final.js"></script>
+<h1>Step 8: Absolute Img &amp; Link</h1>
+<p>This step verifies that absolute <code>&lt;img src&gt;</code> and <code>&lt;link href&gt;</code> paths are rewritten by the proxy.</p>
+<p id="step-info">Checking...</p>
+<img id="abs-img" src="/static/img-check.png" style="display:none">
+<p id="status">PENDING</p>
+<a id="next" href="/step/9" style="display:none">Next</a>
+<script>
+(function() {
+  var img = document.getElementById('abs-img');
+  var tries = 0;
+  var timer = setInterval(function() {
+    var cssColor = getComputedStyle(document.getElementById('step-info')).color;
+    var cssOk = cssColor === 'rgb(0, 128, 0)' || cssColor === 'green';
+    var imgOk = img.complete && img.naturalWidth > 0;
+    if (cssOk && imgOk) {
+      clearInterval(timer);
+      document.getElementById('status').textContent = 'ABS_IMG_LINK_OK';
+      document.getElementById('next').style.display = '';
+    } else if (++tries > 50) {
+      clearInterval(timer);
+      document.getElementById('status').textContent = 'FAILED: css=' + cssOk + ' img=' + imgOk;
+    }
+  }, 100);
+})();
+</script>
 </body></html>
