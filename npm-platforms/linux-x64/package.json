@@ -1,6 +1,6 @@
 {
   "name": "@choonkeat/agent-reverse-proxy-linux-x64",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "agent-reverse-proxy binary for linux/amd64",
   "license": "MIT",
   "os": ["linux"],
