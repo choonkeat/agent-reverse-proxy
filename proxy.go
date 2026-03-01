@@ -150,7 +150,11 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 			if pathPrefix != "" {
 				spaNote = fmt.Sprintf(`<div class="note">%s unreachable. We can only use path-based proxy, so SPAs (React, Vue, etc.) must use hash-based routing (e.g. /#/dashboard)</div>`, appAddr)
 			}
-			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appAddr, spaNote)
+			themeValue := "dark" // default
+			if c, err := r.Cookie(themeCookie); err == nil && (c.Value == "light" || c.Value == "dark") {
+				themeValue = c.Value
+			}
+			fmt.Fprintf(w, previewProxyErrorPage, themeValue, themeCookie, appAddr, spaNote)
 			return
 		}
 		defer resp.Body.Close()

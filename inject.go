@@ -9,7 +9,7 @@ var debugInjectScriptRe = regexp.MustCompile(`(?i)(<head[^>]*>|<body[^>]*>)`)
 // Uses fetch-based polling to avoid white flash on reload
 // Note: %% is used to escape % characters in CSS (e.g., 50%%, 100vh) for fmt.Fprintf
 const previewProxyErrorPage = `<!DOCTYPE html>
-<html>
+<html data-theme="%s">
 <head>
     <meta charset="utf-8">
     <title>App Preview</title>
