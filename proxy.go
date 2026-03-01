@@ -148,7 +148,7 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 			w.WriteHeader(http.StatusBadGateway)
 			spaNote := ""
 			if pathPrefix != "" {
-				spaNote = `<div class="note">SPAs (React, Vue, etc.) must use hash-based routing (e.g. /#/dashboard)</div>`
+				spaNote = fmt.Sprintf(`<div class="note">%s unreachable. We can only use path-based proxy, so SPAs (React, Vue, etc.) must use hash-based routing (e.g. /#/dashboard)</div>`, appAddr)
 			}
 			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appAddr, spaNote)
 			return
