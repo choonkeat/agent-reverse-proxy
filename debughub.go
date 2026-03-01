@@ -196,7 +196,7 @@ func (h *DebugHub) RouteCommand(msg []byte) {
 	switch envelope.T {
 	case "navigate", "reload":
 		h.ForwardToShellClients(msg)
-	case "query":
+	case "query", "click", "type", "fillForm", "pressKey", "evaluate":
 		h.ForwardToInjectClients(msg)
 	default:
 		h.ForwardToIframes(msg)

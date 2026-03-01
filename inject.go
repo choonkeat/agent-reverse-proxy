@@ -350,6 +350,84 @@ const debugInjectJS = `(function() {
               visible: el ? (el.offsetParent !== null || el.offsetWidth > 0 || el.offsetHeight > 0) : false,
               rect: el ? el.getBoundingClientRect() : null
             });
+          } else if (cmd.t === 'click') {
+            var clickEl = document.querySelector(cmd.selector);
+            if (clickEl) {
+              clickEl.click();
+              send({ t: 'clickResult', id: cmd.id, success: true, tag: clickEl.tagName.toLowerCase(), text: (clickEl.textContent || '').substring(0, 200) });
+            } else {
+              send({ t: 'clickResult', id: cmd.id, success: false, error: 'Element not found: ' + cmd.selector });
+            }
+          } else if (cmd.t === 'type') {
+            var typeEl = cmd.selector ? document.querySelector(cmd.selector) : document.activeElement;
+            if (typeEl && typeEl !== document.body) {
+              typeEl.focus();
+              if (cmd.clear) {
+                typeEl.value = '';
+                typeEl.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+              // Type character by character to trigger key handlers
+              var text = cmd.text || '';
+              for (var ci = 0; ci < text.length; ci++) {
+                var ch = text[ci];
+                typeEl.value = (typeEl.value || '') + ch;
+                typeEl.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+              typeEl.dispatchEvent(new Event('change', { bubbles: true }));
+              if (cmd.submit) {
+                var form = typeEl.closest ? typeEl.closest('form') : null;
+                if (form) {
+                  form.requestSubmit ? form.requestSubmit() : form.submit();
+                } else {
+                  typeEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                }
+              }
+              send({ t: 'typeResult', id: cmd.id, success: true, value: (typeEl.value || '').substring(0, 500) });
+            } else {
+              send({ t: 'typeResult', id: cmd.id, success: false, error: cmd.selector ? 'Element not found: ' + cmd.selector : 'No active element to type into' });
+            }
+          } else if (cmd.t === 'fillForm') {
+            var results = [];
+            var fields = cmd.fields || [];
+            for (var fi = 0; fi < fields.length; fi++) {
+              var field = fields[fi];
+              var fieldEl = document.querySelector(field.selector);
+              if (fieldEl) {
+                if (fieldEl.type === 'checkbox' || fieldEl.type === 'radio') {
+                  fieldEl.checked = field.value === 'true' || field.value === true;
+                } else if (fieldEl.tagName === 'SELECT') {
+                  fieldEl.value = field.value;
+                } else {
+                  fieldEl.focus();
+                  fieldEl.value = field.value;
+                }
+                fieldEl.dispatchEvent(new Event('input', { bubbles: true }));
+                fieldEl.dispatchEvent(new Event('change', { bubbles: true }));
+                results.push({ selector: field.selector, success: true });
+              } else {
+                results.push({ selector: field.selector, success: false, error: 'Element not found' });
+              }
+            }
+            send({ t: 'fillFormResult', id: cmd.id, results: results });
+          } else if (cmd.t === 'pressKey') {
+            var keyEl = cmd.selector ? document.querySelector(cmd.selector) : document.activeElement;
+            if (keyEl) {
+              if (cmd.selector) keyEl.focus();
+              var keyOpts = { key: cmd.key, code: cmd.key, bubbles: true, cancelable: true };
+              keyEl.dispatchEvent(new KeyboardEvent('keydown', keyOpts));
+              keyEl.dispatchEvent(new KeyboardEvent('keypress', keyOpts));
+              keyEl.dispatchEvent(new KeyboardEvent('keyup', keyOpts));
+              send({ t: 'pressKeyResult', id: cmd.id, success: true, key: cmd.key });
+            } else {
+              send({ t: 'pressKeyResult', id: cmd.id, success: false, error: cmd.selector ? 'Element not found: ' + cmd.selector : 'No active element' });
+            }
+          } else if (cmd.t === 'evaluate') {
+            try {
+              var evalResult = (new Function('return (' + cmd.expression + ')'))();
+              send({ t: 'evaluateResult', id: cmd.id, success: true, result: serialize(evalResult) });
+            } catch (evalErr) {
+              send({ t: 'evaluateResult', id: cmd.id, success: false, error: evalErr.message });
+            }
           }
         } catch (err) {
           // Ignore parse errors
