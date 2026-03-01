@@ -146,7 +146,11 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 			log.Printf("Preview proxy error: %v", err)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appAddr)
+			spaNote := ""
+			if pathPrefix != "" {
+				spaNote = `<div class="note">SPAs (React, Vue, etc.) must use hash-based routing (e.g. /#/dashboard)</div>`
+			}
+			fmt.Fprintf(w, previewProxyErrorPage, themeCookie, appAddr, spaNote)
 			return
 		}
 		defer resp.Body.Close()

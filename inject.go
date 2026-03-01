@@ -75,6 +75,12 @@ const previewProxyErrorPage = `<!DOCTYPE html>
             line-height: 1.5;
         }
         .port { color: var(--pp-port); }
+        .note {
+            font-size: 0.75rem;
+            color: var(--pp-status);
+            margin-top: 1rem;
+            line-height: 1.4;
+        }
         .status {
             font-size: 0.8rem;
             color: var(--pp-status);
@@ -102,6 +108,7 @@ const previewProxyErrorPage = `<!DOCTYPE html>
             <div class="instruction-label">Tell your agent:</div>
             <div class="instruction-text">Start a hot-reload web app on <span class="port">%s</span></div>
         </div>
+        %s
         <div class="status">
             <span class="status-dot"></span>
             <span id="status-text">Listening for app...</span>
