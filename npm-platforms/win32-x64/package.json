@@ -1,6 +1,6 @@
 {
   "name": "@choonkeat/agent-reverse-proxy-win32-x64",
-  "version": "0.2.7",
+  "version": "0.2.9",
   "description": "agent-reverse-proxy binary for windows/amd64",
   "license": "MIT",
   "os": ["win32"],
