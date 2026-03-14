@@ -16,6 +16,23 @@ import (
 	"time"
 )
 
+// previewClient is a shared HTTP client for the preview reverse proxy.
+// Using a single client avoids leaking http.Transport instances (each with its
+// own TLS state and connection pool) on every proxied request.
+var previewClient = &http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
 // absPathRewriteRe matches absolute paths in HTML attributes and CSS url() that need
 // prefixing in dynamic proxy mode. It captures the context (href=", src=", etc.) and
 // the leading slash+char, avoiding protocol-relative URLs (//...).
@@ -104,20 +121,6 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 		targetURL.Path = singleJoiningSlash(target.Path, r.URL.Path)
 		targetURL.RawQuery = r.URL.RawQuery
 
-		// Create HTTP client with TLS config that allows self-signed certs
-		client := &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-			// Don't follow redirects automatically - let the browser handle them
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
-
 		// Create outgoing request
 		outReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL.String(), r.Body)
 		if err != nil {
@@ -141,7 +144,7 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 		outReq.Host = target.Host
 
 		// Make the request
-		resp, err := client.Do(outReq)
+		resp, err := previewClient.Do(outReq)
 		if err != nil {
 			log.Printf("Preview proxy error: %v", err)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
