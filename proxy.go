@@ -104,21 +104,46 @@ func removeCSPDirective(csp, directive string) string {
 	return strings.Join(filtered, ";")
 }
 
+// proxyHooks holds optional per-request customization threaded from Config.
+// A zero value (both fields nil) reproduces v0.2.9 behavior exactly.
+type proxyHooks struct {
+	// resolveTarget selects a per-request backend + upstream Host from the
+	// inbound request Host. Returns ok=false to fall through to the fixed
+	// target with today's Host-clobber behavior.
+	resolveTarget func(inboundHost string) (target *url.URL, upstreamHost string, ok bool)
+	// cookieDomainRewrite maps an upstream Set-Cookie Domain to the
+	// browser-facing domain. Returns "" to strip Domain. nil = always strip.
+	cookieDomainRewrite func(domain string) string
+}
+
 // handleProxyRequest proxies requests to the user's app at the given target URL.
 // If noInject is true, HTML injection is disabled (plain reverse proxy).
 // pathPrefix is the dynamic-mode path prefix (e.g. "/http/localhost:8080") to
 // prepend to absolute paths in responses; pass "" in fixed mode.
-func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string, scriptTag string, pathPrefix string) http.HandlerFunc {
+// hooks optionally customizes per-request target selection and cookie rewriting;
+// a zero value reproduces v0.2.9 behavior (fixed target, Host clobbered).
+func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCookie string, scriptTag string, pathPrefix string, hooks proxyHooks) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Resolve the per-request target and upstream Host (two-hostname model).
+		// Default: fixed target, Host clobbered to the target host (v0.2.9).
+		effectiveTarget := target
+		upstreamHost := target.Host
+		if hooks.resolveTarget != nil {
+			if rt, uh, ok := hooks.resolveTarget(r.Host); ok {
+				effectiveTarget = rt
+				upstreamHost = uh
+			}
+		}
+
 		// WebSocket upgrade detection: relay raw bytes instead of HTTP proxy
 		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-			handleWebSocketRelay(w, r, target)
+			handleWebSocketRelay(w, r, effectiveTarget)
 			return
 		}
 
 		// Build the target URL with the request path
-		targetURL := *target
-		targetURL.Path = singleJoiningSlash(target.Path, r.URL.Path)
+		targetURL := *effectiveTarget
+		targetURL.Path = singleJoiningSlash(effectiveTarget.Path, r.URL.Path)
 		targetURL.RawQuery = r.URL.RawQuery
 
 		// Create outgoing request
@@ -140,8 +165,9 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 			}
 		}
 
-		// Set Host header to target host
-		outReq.Host = target.Host
+		// Set Host header to the resolved upstream host (logical vhost when a
+		// ResolveTarget hook matched, else the fixed target host as before).
+		outReq.Host = upstreamHost
 
 		// Make the request
 		resp, err := previewClient.Do(outReq)
@@ -163,13 +189,13 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 		defer resp.Body.Close()
 
 		// Process response (inject debug script for HTML, handle cookies)
-		processProxyResponse(w, r, resp, target, noInject, scriptTag, pathPrefix)
+		processProxyResponse(w, r, resp, effectiveTarget, noInject, scriptTag, pathPrefix, hooks.cookieDomainRewrite)
 	}
 }
 
 // processProxyResponse handles the response: injects debug script for HTML, strips Domain from cookies,
 // and rewrites absolute paths when pathPrefix is set (dynamic proxy mode).
-func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string, pathPrefix string) {
+func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string, pathPrefix string, cookieDomainRewrite func(domain string) string) {
 	// Copy response headers, handling cookies specially
 	for key, values := range resp.Header {
 		if isHopByHopHeader(key) {
@@ -182,8 +208,15 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 		// Handle Set-Cookie specially to strip Domain attribute
 		if strings.EqualFold(key, "Set-Cookie") {
 			for _, cookie := range resp.Cookies() {
-				// Strip Domain so cookie applies to proxy domain
-				cookie.Domain = ""
+				// Rewrite the cookie Domain logical->reach when a hook is set and
+				// the cookie carried a Domain; otherwise strip it so the cookie
+				// applies to the proxy domain (v0.2.9 behavior). Empty-Domain
+				// cookies stay empty.
+				newDomain := ""
+				if cookie.Domain != "" && cookieDomainRewrite != nil {
+					newDomain = cookieDomainRewrite(cookie.Domain)
+				}
+				cookie.Domain = newDomain
 				// Also strip Secure flag if we're proxying (allows cookies over non-HTTPS proxy)
 				cookie.Secure = false
 				// Prepend pathPrefix to cookie path in dynamic mode

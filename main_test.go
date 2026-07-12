@@ -593,7 +593,7 @@ func TestWebSocketProxyRelay(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -629,7 +629,7 @@ func TestNormalHTTPThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -647,7 +647,7 @@ func TestNormalHTTPThroughProxy(t *testing.T) {
 func TestWebSocketProxyBackendDown(t *testing.T) {
 	backendURL, _ := url.Parse("http://127.0.0.1:1")
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, "1", false, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, "1", false, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -671,7 +671,7 @@ func TestHTMLInjectionThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -696,7 +696,7 @@ func TestNoInjectionForNonHTML(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -721,7 +721,7 @@ func TestNoInjectFlag(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), true /* noInject */, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), true /* noInject */, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -751,7 +751,7 @@ func TestGzipHTMLInjectionThroughProxy(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Port(), false, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -790,7 +790,7 @@ func TestLocationHeaderRewriting(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -826,7 +826,7 @@ func TestLocationHeaderRelativeUnchanged(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 
@@ -868,7 +868,7 @@ func TestLocationHeaderWithCookies(t *testing.T) {
 
 	backendURL, _ := url.Parse(backend.URL)
 	proxyMux := http.NewServeMux()
-	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, ""))
+	proxyMux.HandleFunc("/", handleProxyRequest(backendURL, backendURL.Host, true, "test-theme", testScriptTag, "", proxyHooks{}))
 	proxy := httptest.NewServer(proxyMux)
 	defer proxy.Close()
 

@@ -44,6 +44,17 @@ type Config struct {
 	// instead of creating a new one. This allows multiple proxy instances
 	// (e.g. path-based and port-based) to share the same debug communication.
 	Hub *DebugHub
+
+	// ResolveTarget optionally selects a per-request backend and upstream Host
+	// from the inbound request Host (leftmost-label demux). Return ok=false to
+	// fall through to the fixed Target with today's Host-clobber behavior. Only
+	// consulted in fixed-target mode. nil = always use the fixed Target.
+	ResolveTarget func(inboundHost string) (target *url.URL, upstreamHost string, ok bool)
+
+	// CookieDomainRewrite optionally maps an upstream Set-Cookie Domain to the
+	// browser-facing domain. Return "" to strip the Domain (today's behavior).
+	// nil = always strip Domain.
+	CookieDomainRewrite func(domain string) string
 }
 
 // Proxy is an HTTP handler that reverse-proxies requests with optional
@@ -115,7 +126,10 @@ func New(cfg Config) (*Proxy, error) {
 		if cfg.Target != nil {
 			// Fixed target mode — use basePath as prefix for URL rewriting
 			appAddr := cfg.Target.Host
-			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag(), bp)(w, r)
+			handleProxyRequest(cfg.Target, appAddr, cfg.NoInject, cfg.ThemeCookie, p.scriptTag(), bp, proxyHooks{
+				resolveTarget:       cfg.ResolveTarget,
+				cookieDomainRewrite: cfg.CookieDomainRewrite,
+			})(w, r)
 		} else {
 			// Dynamic target mode
 			p.handleDynamicProxy(w, r)
@@ -213,7 +227,11 @@ func (p *Proxy) handleDynamicProxy(w http.ResponseWriter, r *http.Request) {
 
 	pathPrefix := p.basePath + "/" + target.Scheme + "/" + target.Host
 	appAddr := target.Host
-	handleProxyRequest(target, appAddr, p.config.NoInject, p.config.ThemeCookie, p.scriptTag(), pathPrefix)(w, r)
+	// Dynamic mode already resolves the target from the request path, so no
+	// ResolveTarget demux; cookie-domain rewriting still applies.
+	handleProxyRequest(target, appAddr, p.config.NoInject, p.config.ThemeCookie, p.scriptTag(), pathPrefix, proxyHooks{
+		cookieDomainRewrite: p.config.CookieDomainRewrite,
+	})(w, r)
 }
 
 // serveDynamicLandingPage renders a landing page for dynamic proxy mode at "/".
