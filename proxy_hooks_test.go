@@ -1,6 +1,7 @@
 package agentproxy
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -151,9 +152,19 @@ func TestCookieDomainRewrite(t *testing.T) {
 			Target:     backendURL,
 			ToolPrefix: "preview",
 			NoInject:   true,
-			CookieDomainRewrite: func(domain string) string {
+			CookieDomainRewrite: func(inboundHost, domain string) string {
+				// Derive the reach from the inbound Host (leftmost label
+				// removed) instead of hardcoding it -- proves the hook is
+				// per-request.
+				reach := inboundHost
+				if i := strings.Index(inboundHost, "."); i >= 0 {
+					reach = inboundHost[i+1:]
+				}
+				if h, _, err := net.SplitHostPort(reach); err == nil {
+					reach = h
+				}
 				if strings.HasSuffix(domain, "lvh.me") {
-					return ".x.sslip.io"
+					return "." + reach
 				}
 				return ""
 			},

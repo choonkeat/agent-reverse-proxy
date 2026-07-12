@@ -112,8 +112,9 @@ type proxyHooks struct {
 	// target with today's Host-clobber behavior.
 	resolveTarget func(inboundHost string) (target *url.URL, upstreamHost string, ok bool)
 	// cookieDomainRewrite maps an upstream Set-Cookie Domain to the
-	// browser-facing domain. Returns "" to strip Domain. nil = always strip.
-	cookieDomainRewrite func(domain string) string
+	// browser-facing domain, given the inbound request Host. Returns "" to
+	// strip Domain. nil = always strip.
+	cookieDomainRewrite func(inboundHost, domain string) string
 }
 
 // handleProxyRequest proxies requests to the user's app at the given target URL.
@@ -195,7 +196,7 @@ func handleProxyRequest(target *url.URL, appAddr string, noInject bool, themeCoo
 
 // processProxyResponse handles the response: injects debug script for HTML, strips Domain from cookies,
 // and rewrites absolute paths when pathPrefix is set (dynamic proxy mode).
-func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string, pathPrefix string, cookieDomainRewrite func(domain string) string) {
+func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, target *url.URL, noInject bool, scriptTag string, pathPrefix string, cookieDomainRewrite func(inboundHost, domain string) string) {
 	// Copy response headers, handling cookies specially
 	for key, values := range resp.Header {
 		if isHopByHopHeader(key) {
@@ -214,7 +215,7 @@ func processProxyResponse(w http.ResponseWriter, r *http.Request, resp *http.Res
 				// cookies stay empty.
 				newDomain := ""
 				if cookie.Domain != "" && cookieDomainRewrite != nil {
-					newDomain = cookieDomainRewrite(cookie.Domain)
+					newDomain = cookieDomainRewrite(r.Host, cookie.Domain)
 				}
 				cookie.Domain = newDomain
 				// Also strip Secure flag if we're proxying (allows cookies over non-HTTPS proxy)

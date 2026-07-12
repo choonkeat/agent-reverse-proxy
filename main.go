@@ -13,7 +13,7 @@ import (
 )
 
 // ProxyVersion is the version of the agent-reverse-proxy.
-const ProxyVersion = "0.2.10"
+const ProxyVersion = "0.2.11"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -52,9 +52,10 @@ type Config struct {
 	ResolveTarget func(inboundHost string) (target *url.URL, upstreamHost string, ok bool)
 
 	// CookieDomainRewrite optionally maps an upstream Set-Cookie Domain to the
-	// browser-facing domain. Return "" to strip the Domain (today's behavior).
-	// nil = always strip Domain.
-	CookieDomainRewrite func(domain string) string
+	// browser-facing domain, given the inbound request Host (so a caller can
+	// derive the per-request reach). Return "" to strip the Domain (today's
+	// behavior). nil = always strip Domain.
+	CookieDomainRewrite func(inboundHost, domain string) string
 }
 
 // Proxy is an HTTP handler that reverse-proxies requests with optional
