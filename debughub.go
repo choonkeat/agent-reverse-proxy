@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -24,6 +25,19 @@ type DebugHub struct {
 	// In-process subscribers: MCP tools subscribe here to receive iframe messages
 	inProcMu   sync.Mutex
 	inProcSubs map[chan []byte]struct{}
+
+	// pendingOpen holds the most recent open-URL event that arrived while
+	// no UI observer was connected. Agents fire open/xdg-open at spawn time
+	// (e.g. claude's OAuth login) -- often moments BEFORE the UI page
+	// finishes loading and connects its observer WebSocket -- so a
+	// fire-and-forget broadcast would be lost. The first observer to
+	// connect within openReplayTTL receives it once. Guarded by mu.
+	pendingOpen   []byte
+	pendingOpenAt time.Time
+	// openReplayTTL bounds how stale a queued open event may be before it
+	// is dropped instead of replayed. A field (not a const) so tests can
+	// shorten it.
+	openReplayTTL time.Duration
 }
 
 // NewDebugHub creates a new DebugHub.
@@ -33,6 +47,7 @@ func NewDebugHub() *DebugHub {
 		injectClients: make(map[*websocket.Conn]bool),
 		uiObservers:   make(map[*websocket.Conn]bool),
 		inProcSubs:    make(map[chan []byte]struct{}),
+		openReplayTTL: 60 * time.Second,
 	}
 }
 
@@ -78,12 +93,54 @@ func (h *DebugHub) RemoveIframeClient(conn *websocket.Conn) {
 	h.RemoveShellClient(conn)
 }
 
-// AddUIObserver registers a UI observer connection.
+// AddUIObserver registers a UI observer connection. If an open-URL event
+// was queued while no observer was connected (see SendOrQueueOpen), it is
+// replayed to this connection.
 func (h *DebugHub) AddUIObserver(conn *websocket.Conn) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.uiObservers[conn] = true
-	log.Printf("[DebugHub] UI observer connected (total: %d)", len(h.uiObservers))
+	total := len(h.uiObservers)
+	h.mu.Unlock()
+	log.Printf("[DebugHub] UI observer connected (total: %d)", total)
+	if replay := h.takePendingOpen(); replay != nil {
+		if err := conn.WriteMessage(websocket.TextMessage, replay); err != nil {
+			log.Printf("[DebugHub] Error replaying open event to UI observer: %v", err)
+		}
+	}
+}
+
+// SendOrQueueOpen delivers an open-URL event to connected UI observers, or
+// queues it for the next observer to connect when none are listening yet.
+func (h *DebugHub) SendOrQueueOpen(msg []byte) {
+	h.mu.Lock()
+	observers := make([]*websocket.Conn, 0, len(h.uiObservers))
+	for conn := range h.uiObservers {
+		observers = append(observers, conn)
+	}
+	if len(observers) == 0 {
+		h.pendingOpen = append([]byte(nil), msg...)
+		h.pendingOpenAt = time.Now()
+	}
+	h.mu.Unlock()
+
+	for _, conn := range observers {
+		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			log.Printf("[DebugHub] Error sending to UI observer: %v", err)
+		}
+	}
+}
+
+// takePendingOpen returns the queued open event if one is fresh (within
+// openReplayTTL), clearing it either way so it is delivered at most once.
+func (h *DebugHub) takePendingOpen() []byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	msg := h.pendingOpen
+	h.pendingOpen = nil
+	if msg == nil || time.Since(h.pendingOpenAt) > h.openReplayTTL {
+		return nil
+	}
+	return msg
 }
 
 // RemoveUIObserver unregisters a UI observer connection.

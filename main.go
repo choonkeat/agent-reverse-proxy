@@ -13,7 +13,7 @@ import (
 )
 
 // ProxyVersion is the version of the agent-reverse-proxy.
-const ProxyVersion = "0.2.11"
+const ProxyVersion = "0.2.12"
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -110,7 +110,10 @@ func New(cfg Config) (*Proxy, error) {
 			return
 		}
 		msg, _ := json.Marshal(map[string]string{"t": "open", "url": rawURL})
-		hub.SendToUIObservers(msg)
+		// Queue-or-send: the UI page may still be loading when an agent
+		// fires open at spawn time (e.g. claude's OAuth login URL); a
+		// plain broadcast to zero observers would silently drop it.
+		hub.SendOrQueueOpen(msg)
 		log.Printf("[DebugHub] open → %s", rawURL)
 		w.WriteHeader(http.StatusOK)
 	})
