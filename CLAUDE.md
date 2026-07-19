@@ -29,3 +29,4 @@ Before considering a change complete:
 | `make example-run` | Build, start server, run tests, stop server (CI) |
 
 All accept `EXAMPLE_PORT` (default 9876) and `TARGET_URL`.
+See .swe-swe/docs/AGENTS.md (if it exists) for context of this current environment
